@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#define SAVE_FILE "./.magazyn"
+
 typedef struct {
 	size_t capacity;
 	size_t a_count;
@@ -15,6 +17,9 @@ extern magazyn_t magazyn;
 
 void *stanowisko_1(void *lock);
 void *stanowisko_2(void *lock);
+
+int restore_state();
+int save_state();
 
 static void sig_handler(int signo);
 

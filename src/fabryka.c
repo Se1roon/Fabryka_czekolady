@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
 
@@ -10,14 +11,9 @@
 // TODO: Implement saving "magazyn" state to a file on signal
 
 
-magazyn_t magazyn = {
-	.capacity = 210,
-	.a_count = 50,
-	.b_count = 50,
-	.c_count = 25,
-	.d_count = 20
-};
+magazyn_t magazyn;
 
+// #define TEST_RESTORE
 
 int main(void) {
 	pthread_t s1_pid;	// TID of stanowisko_1
@@ -26,6 +22,19 @@ int main(void) {
 	unsigned char terrn = 1;	// Number indicating which thread (or signal) is responsible for the error 
 								// 1 - stanowisko_1 (or SIGUSR1)
 								// 2 - stanowisko_2 (or SIGUSR2)
+
+	#ifdef TEST_RESTORE
+		if (restore_state() != 0) {
+			fprintf(stderr, "[Fabryka][main][ERRN] Something went wrong while restoring magazine's state!\n");
+			return 5;
+		}
+	#else
+		magazyn.capacity = 210;
+		magazyn.a_count = 50;
+		magazyn.b_count = 50;
+		magazyn.c_count = 25;
+		magazyn.d_count = 20;
+	#endif
 
 	struct sigaction sig_action;
 	sig_action.sa_handler = sig_handler;
@@ -41,7 +50,6 @@ int main(void) {
 		goto errn_sig_handler;
 	}
 
-	terrn = 2;
 	if (pthread_create(&s1_pid, NULL, stanowisko_1, (void *)&lock) != 0) {
 		terrn = 1;
 		goto errn_thread_create;
@@ -70,6 +78,11 @@ int main(void) {
 	printf("B: %zu\n", magazyn.b_count);
 	printf("C: %zu\n", magazyn.c_count);
 	printf("D: %zu\n", magazyn.d_count);
+
+	if (save_state() != 0) {
+		fprintf(stderr, "[Fabryka][main][ERRN] Something went wrong while saving magazine's state!\n");
+		return 4;
+	}
 
 	return 0;
 
@@ -165,6 +178,40 @@ void *stanowisko_2(void *lock) {
 	}
 
 	return (void *)0;
+}
+
+int restore_state() {
+	int fd = open(SAVE_FILE, O_RDONLY);
+	if (fd < 0) {
+		fprintf(stderr, "[Fabryka][RESTORE][ERRN] Unable to open file '%s'\n", SAVE_FILE);
+		return 1;
+	}
+
+	if (read(fd, &magazyn, sizeof(magazyn)) < 0) {
+		fprintf(stderr, "[Fabryka][RESTORE][ERRN] Unable to read from file '%s'\n", SAVE_FILE);
+		close(fd);
+		return 2;
+	}
+
+	close(fd);
+	return 0;
+}
+
+int save_state() {
+	int fd = open(SAVE_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	if (fd < 0) {
+		fprintf(stderr, "[Fabryka][SAVE][ERRN] Unable to open file '%s'\n", SAVE_FILE);
+		return 1;
+	}
+
+	if (write(fd, &magazyn, sizeof(magazyn)) < 0) {
+		fprintf(stderr, "[Fabryka][SAVE][ERRN] Unable to write to file '%s'\n", SAVE_FILE);
+		close(fd);
+		return 2;
+	}
+
+	close(fd);
+	return 0;
 }
 
 static void sig_handler(int signo) {
