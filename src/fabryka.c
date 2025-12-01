@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -12,6 +13,9 @@
 
 
 magazyn_t magazyn;
+
+bool magazine_open = true;
+bool slaves_work = true;
 
 // #define TEST_RESTORE
 
@@ -30,10 +34,10 @@ int main(void) {
 		}
 	#else
 		magazyn.capacity = 210;
-		magazyn.a_count = 50;
-		magazyn.b_count = 50;
-		magazyn.c_count = 25;
-		magazyn.d_count = 20;
+		magazyn.a_count = 10000000;
+		magazyn.b_count = 10000000;
+		magazyn.c_count = 10000000;
+		magazyn.d_count = 10000000;
 	#endif
 
 	struct sigaction sig_action;
@@ -104,37 +108,40 @@ void *stanowisko_1(void *lock) {
 	unsigned long errn_code = 0;	// 0 - success, no error
 									// other - error
 
-	for (int i = 0; i < 10; i++) {
-		// Acquire the Lock
-		if (pthread_mutex_lock(mutex_lock) != 0) {
-			fprintf(stderr, "[Fabryka][stanowisko_1][TID=%lu][ERRN] Failed to acquire lock!\n", pthread_self());
-			return (void *)1;
-		}
-
-		// Do stuff on Critical Section
-		if (magazyn.a_count > 0 && magazyn.b_count > 0 && magazyn.c_count > 0) {
-			magazyn.a_count--;
-			magazyn.b_count--;
-			magazyn.c_count--;
-		} else {
-			errn_code = 2;
-			goto release_lock; // Could omit this because it will flow naturally into it, but
-							   // something in the future might go between goto and the label
-		}
-
-		// Release the Lock
-		release_lock:
-			if (pthread_mutex_unlock(mutex_lock) != 0) {
-				fprintf(stderr, "[Fabryka][stanowisko_1][TID=%lu][ERRN] Failed to release the lock!\n", pthread_self());
+	while (slaves_work) {
+		if (magazine_open) {
+			// Acquire the Lock
+			if (pthread_mutex_lock(mutex_lock) != 0) {
+				fprintf(stderr, "[Fabryka][stanowisko 1][TID=%lu][ERRN] Failed to acquire lock!\n", pthread_self());
 				return (void *)1;
 			}
 
-			if (errn_code != 0) {
-				printf("[Fabryka][stanowisko 1][WARN] Brak składników w magazynie!\n");
-				return (void *)errn_code;
+			// Do stuff on Critical Section
+			if (magazyn.a_count > 0 && magazyn.b_count > 0 && magazyn.c_count > 0) {
+				magazyn.a_count--;
+				magazyn.b_count--;
+				magazyn.c_count--;
+			} else {
+				errn_code = 2;
+				goto release_lock; // Could omit this because it will flow naturally into it, but
+								   // something in the future might go between goto and the label
 			}
 
-			printf("[Fabryka][stanowisko 1][INFO] Wyworzono czekoladę typu 1!\n");
+			// Release the Lock
+			release_lock:
+				if (pthread_mutex_unlock(mutex_lock) != 0) {
+					fprintf(stderr, "[Fabryka][stanowisko 1][TID=%lu][ERRN] Failed to release the lock!\n", pthread_self());
+					return (void *)1;
+				}
+
+				if (errn_code != 0) {
+					printf("[Fabryka][stanowisko 1][WARN] Brak składników w magazynie!\n");
+					return (void *)errn_code;
+				}
+
+				printf("[Fabryka][stanowisko 1][INFO] Wytworzono czekoladę typu 1!\n");
+		} else
+			printf("[Fabryka][stanowisko 1][INFO] Magazine closed, can't produce!\n");
 	}
 
 	return (void *)0;
@@ -145,36 +152,39 @@ void *stanowisko_2(void *lock) {
 	unsigned long errn_code = 0;	// 0 - success, no error
 									// other - error
 
-	for (int i = 0; i < 10; i++) {
-		// Acquire the Lock
-		if (pthread_mutex_lock(mutex_lock) != 0) {
-			fprintf(stderr, "[Fabryka][stanowisko_2][TID=%lu][ERRN] Failed to acquire lock!\n", pthread_self());
-			return (void *)1;
-		}
-
-		// Do stuff on Critical Section
-		if (magazyn.a_count > 0 && magazyn.b_count > 0 && magazyn.d_count > 0) {
-			magazyn.a_count--;
-			magazyn.b_count--;
-			magazyn.d_count--;
-		} else {
-			errn_code = 2;
-			goto release_lock; // Could omit this because it will flow naturally into it, but
-							   // something in the future might go between goto and the label
-		}
-
-		release_lock:
-			if (pthread_mutex_unlock(mutex_lock) != 0) {
-				fprintf(stderr, "[Fabryka][stanowisko_2][TID=%lu][ERRN] Failed to release the lock!\n", pthread_self());
+	while (slaves_work) {
+		if (magazine_open) {
+			// Acquire the Lock
+			if (pthread_mutex_lock(mutex_lock) != 0) {
+				fprintf(stderr, "[Fabryka][stanowisko 2][TID=%lu][ERRN] Failed to acquire lock!\n", pthread_self());
 				return (void *)1;
 			}
 
-			if (errn_code != 0) {
-				printf("[Fabryka][stanowisko 2][WARN] Brak składników w magazynie!\n");
-				return (void *)errn_code;
+			// Do stuff on Critical Section
+			if (magazyn.a_count > 0 && magazyn.b_count > 0 && magazyn.d_count > 0) {
+				magazyn.a_count--;
+				magazyn.b_count--;
+				magazyn.d_count--;
+			} else {
+				errn_code = 2;
+				goto release_lock; // Could omit this because it will flow naturally into it, but
+								   // something in the future might go between goto and the label
 			}
 
-			printf("[Fabryka][stanowisko 2][INFO] Wyworzono czekoladę typu 2!\n");
+			release_lock:
+				if (pthread_mutex_unlock(mutex_lock) != 0) {
+					fprintf(stderr, "[Fabryka][stanowisko 2][TID=%lu][ERRN] Failed to release the lock!\n", pthread_self());
+					return (void *)1;
+				}
+
+				if (errn_code != 0) {
+					printf("[Fabryka][stanowisko 2][WARN] Brak składników w magazynie!\n");
+					return (void *)errn_code;
+				}
+
+				printf("[Fabryka][stanowisko 2][INFO] Wytworzono czekoladę typu 2!\n");
+		} else
+			printf("[Fabryka][stanowisko 2][INFO] Magazine closed, can't produce!\n");
 	}
 
 	return (void *)0;
@@ -218,8 +228,10 @@ static void sig_handler(int signo) {
 	// Using 'write' syscall instead of just printf to avoid deadlock
 	if (signo == SIGUSR1) {
 		write(1, "[Fabryka][SIG][INFO] Received signal: polecenie_1\n", 50);
+		slaves_work = false;
 	} else if (signo == SIGUSR2) {
 		write(1, "[Fabryka][SIG][INFO] Received signal: polecenie_2\n", 50);
+		magazine_open = !magazine_open;
 	} else {
 		write(1, "[Fabryka][SIG][WARN] Received unknown signal\n", 45);
 	}
