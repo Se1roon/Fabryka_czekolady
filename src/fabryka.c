@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
 #include <pthread.h>
 
 #include "fabryka.h"
 
-
-// TODO: Implement signal handling
-// TODO: Initialize git repository
+// TODO: Implement synchronized logging to file
 // TODO: Implement saving "magazyn" state to a file on signal
 
 
@@ -23,9 +23,23 @@ int main(void) {
 	pthread_t s1_pid;	// TID of stanowisko_1
 	pthread_t s2_pid;	// TID of stanowisko_2
 	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-	unsigned char terrn = 1;	// Number indicating which thread is responsible for the error 
-								// 1 - stanowisko_1
-								// 2 - stanowisko_2
+	unsigned char terrn = 1;	// Number indicating which thread (or signal) is responsible for the error 
+								// 1 - stanowisko_1 (or SIGUSR1)
+								// 2 - stanowisko_2 (or SIGUSR2)
+
+	struct sigaction sig_action;
+	sig_action.sa_handler = sig_handler;
+	sigemptyset(&sig_action.sa_mask);
+	sig_action.sa_flags = SA_RESTART;
+
+	if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {
+		terrn = 1;
+		goto errn_sig_handler;
+	}
+	if (sigaction(SIGUSR2, &sig_action, NULL) != 0) {
+		terrn = 2;
+		goto errn_sig_handler;
+	}
 
 	terrn = 2;
 	if (pthread_create(&s1_pid, NULL, stanowisko_1, (void *)&lock) != 0) {
@@ -60,12 +74,15 @@ int main(void) {
 	return 0;
 
 	// Errors
+errn_sig_handler:
+	fprintf(stderr, "[Fabryka][SIG][ERRN] Can't catch signal SIGUSR%d\n", terrn);
+	return 1;
 errn_thread_create:
 	fprintf(stderr, "[Fabryka][main][ERRN] Failed to create thread (stanowisko_%u)!\n", terrn);
-	return 1;
+	return 2;
 errn_thread_join:
 	fprintf(stderr, "[Fabryka][main][ERRN] Failed to join thread (stanowisko_%u)[TID=%lu]\n", terrn, terrn == 1 ? s1_pid : s2_pid);
-	return 2;
+	return 3;
 }
 
 
@@ -88,7 +105,8 @@ void *stanowisko_1(void *lock) {
 			magazyn.c_count--;
 		} else {
 			errn_code = 2;
-			goto release_lock;
+			goto release_lock; // Could omit this because it will flow naturally into it, but
+							   // something in the future might go between goto and the label
 		}
 
 		// Release the Lock
@@ -128,7 +146,8 @@ void *stanowisko_2(void *lock) {
 			magazyn.d_count--;
 		} else {
 			errn_code = 2;
-			goto release_lock;
+			goto release_lock; // Could omit this because it will flow naturally into it, but
+							   // something in the future might go between goto and the label
 		}
 
 		release_lock:
@@ -146,5 +165,18 @@ void *stanowisko_2(void *lock) {
 	}
 
 	return (void *)0;
+}
+
+static void sig_handler(int signo) {
+	// Using 'write' syscall instead of just printf to avoid deadlock
+	if (signo == SIGUSR1) {
+		write(1, "[Fabryka][SIG][INFO] Received signal: polecenie_1\n", 50);
+	} else if (signo == SIGUSR2) {
+		write(1, "[Fabryka][SIG][INFO] Received signal: polecenie_2\n", 50);
+	} else {
+		write(1, "[Fabryka][SIG][WARN] Received unknown signal\n", 45);
+	}
+
+	return;
 }
 

@@ -16,4 +16,6 @@ extern magazyn_t magazyn;
 void *stanowisko_1(void *lock);
 void *stanowisko_2(void *lock);
 
+static void sig_handler(int signo);
+
 #endif
