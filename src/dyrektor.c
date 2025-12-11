@@ -12,7 +12,7 @@ int main(void) {
 			fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process!\n");
 			exit(1);
 		case 0: // Child
-			if (execl("./fabryka", "./fabryka", NULL) < 0) {
+			if (execl("./bin/fabryka", "./bin/fabryka", NULL) < 0) {
 				fprintf(stderr, "[Dyrektor][main][ERRN] Faield to create Fabryka process!\n");
 				exit(1);
 			}
