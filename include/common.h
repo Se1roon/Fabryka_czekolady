@@ -1,0 +1,19 @@
+#ifndef COMMON_H
+#define COMMON_H
+
+#include <stdio.h>
+
+// Capacity of magazine
+#define MAG_CAPACITY 100
+
+typedef struct {
+    size_t capacity;
+    size_t a_count;
+    size_t b_count;
+    size_t c_count;
+    size_t d_count;
+    // TODO: Add place to store count of produced items
+} SHM_DATA;
+
+
+#endif
