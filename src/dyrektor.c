@@ -51,21 +51,45 @@ int main(void) {
         return 4;
     }
 
-    pid_t cpid;
-    cpid = fork();
-    switch (cpid) {
-        case -1: fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process!\n"); exit(1);
-        case 0: // Child
-            if (execl("./bin/fabryka", "./bin/fabryka", NULL) < 0) {
-                fprintf(stderr, "[Dyrektor][main][ERRN] Faield to create Fabryka process!\n");
-                exit(1);
+    pid_t child_processes[2]; // Dostawcy, Fabryka
+
+    // Start child processes
+    for (int cproc = 0; cproc < 2; cproc++) {
+        pid_t cpid = fork();
+        switch (cpid) {
+            case -1: {
+                fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process! (%s)\n", strerror(errno));
+                clean_up(sem_id, shm_id);
+                return 5;
             }
-            break;
-        default: // Parent
-            printf("Parent\n");
-    };
+            case 0: {
+                const char* exec_prog = (cproc == 0) ? "./bin/dostawcy" : "./bin/fabryka";
+                execl(exec_prog, exec_prog, NULL);
 
+                // execl returns = error
+                fprintf(stderr, "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n", exec_prog, strerror(errno));
+                clean_up(sem_id, shm_id);
+                return 6;
+            }
+            default: child_processes[cproc] = cpid;
+        };
+    }
 
+    // Wait for child processes to finish
+    for (int i = 0; i < 2; i++) {
+        pid_t child_pid = child_processes[i];
+
+        int status = -1;
+        if (waitpid(child_pid, &status, 0) < 0) {
+            fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for child termination! (%s)\n", strerror(errno));
+            clean_up(sem_id, shm_id);
+        }
+
+        if (WIFEXITED(status))
+            printf("[Dyrektor] Child process %d has terminated (code %d)\n", child_pid, WEXITSTATUS(status));
+    }
+
+    clean_up(sem_id, shm_id);
     return 0;
 }
 
