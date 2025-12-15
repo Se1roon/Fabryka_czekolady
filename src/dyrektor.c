@@ -50,17 +50,30 @@ int main(void) {
         clean_up(sem_id, -1);
         return 4;
     }
+    // Initialize capacity in SHM to MAG_CAPACITY
+    SHM_DATA* shm = (SHM_DATA*)shmat(shm_id, 0, 0);
+    if (shm == (void*)-1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
+        clean_up(sem_id, shm_id);
+        return 5;
+    }
+    *(size_t*)shm = (size_t)MAG_CAPACITY;
+    if (shmdt(shm) == -1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to deattach from Shared memory segment! (%s)\n", strerror(errno));
+        clean_up(sem_id, shm_id);
+        return 6;
+    }
 
-    pid_t child_processes[2]; // Dostawcy, Fabryka
+    pid_t child_processes[1]; // Dostawcy, Fabryka
 
     // Start child processes
-    for (int cproc = 0; cproc < 2; cproc++) {
+    for (int cproc = 0; cproc < 1; cproc++) {
         pid_t cpid = fork();
         switch (cpid) {
             case -1: {
                 fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process! (%s)\n", strerror(errno));
                 clean_up(sem_id, shm_id);
-                return 5;
+                return 7;
             }
             case 0: {
                 const char* exec_prog = (cproc == 0) ? "./bin/dostawcy" : "./bin/fabryka";
@@ -69,14 +82,14 @@ int main(void) {
                 // execl returns = error
                 fprintf(stderr, "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n", exec_prog, strerror(errno));
                 clean_up(sem_id, shm_id);
-                return 6;
+                return 8;
             }
             default: child_processes[cproc] = cpid;
         };
     }
 
     // Wait for child processes to finish
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 1; i++) {
         pid_t child_pid = child_processes[i];
 
         int status = -1;

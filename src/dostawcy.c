@@ -48,7 +48,7 @@ int main(void) {
 
     for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
         delivery_guys[d_guy].sem_id = sem_id;
-        delivery_guys[d_guy].shm_id = shm_id;
+        delivery_guys[d_guy].magazine_data = sh_data;
 
         if (pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void*)&delivery_guys[d_guy]) != 0) {
             fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n", strerror(errno));
@@ -69,7 +69,7 @@ int main(void) {
 void* delivery(void* delivery_data) {
     delivery_t* d_data = (delivery_t*)delivery_data;
 
-    printf("Dostawca %d\n", d_data->type);
+    printf("Dostawca %d | %zu\n", d_data->type, d_data->magazine_data->capacity);
 
     return NULL;
 }
