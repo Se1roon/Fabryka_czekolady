@@ -46,21 +46,41 @@ int main(void) {
     delivery_guys[2].type = C;
     delivery_guys[3].type = D;
 
-    for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
-        delivery_guys[d_guy].sem_id = sem_id;
-        delivery_guys[d_guy].magazine_data = sh_data;
+    // TODO: Probably an infinite loop later, break on signal
+    while (magazine_available(sh_data)) {
+        for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
+            delivery_guys[d_guy].sem_id = sem_id;
+            delivery_guys[d_guy].magazine_data = sh_data;
 
-        if (pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void*)&delivery_guys[d_guy]) != 0) {
-            fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n", strerror(errno));
-            return 5;
+            if (pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void*)&delivery_guys[d_guy]) != 0) {
+                fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n", strerror(errno));
+                return 5;
+            }
+        }
+
+        for (int i = 0; i < DELIVERY_GUYS_COUNT; i++) {
+            int* rval = NULL;
+            if (pthread_join(delivery_guys[i].tid, (void*)&rval) != 0) {
+                fprintf(stderr, "[Dostawcy][ERRN] Failed to wait for thread termination! (%s)\n", strerror(errno));
+                return 6;
+            }
+
+            // Remember to check rval for -1 and detach
+            // Now it is not needed because the flow will fall into it nevertheless
         }
     }
 
-    for (int i = 0; i < DELIVERY_GUYS_COUNT; i++) {
-        if (pthread_join(delivery_guys[i].tid, NULL) != 0) {
-            fprintf(stderr, "[Dostawcy][ERRN] Failed to wait for thread termination! (%s)\n", strerror(errno));
-            return 6;
-        }
+
+    printf("A count: %zu\n", sh_data->a_count);
+    printf("B count: %zu\n", sh_data->b_count);
+    printf("C count: %zu\n", sh_data->c_count);
+    printf("D count: %zu\n", sh_data->d_count);
+
+
+    // Detach from SHM
+    if (shmdt(sh_data) == -1) {
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to deattach from Shared Memory segment! (%s)\n", strerror(errno));
+        return 7;
     }
 
     return 0;
@@ -69,7 +89,37 @@ int main(void) {
 void* delivery(void* delivery_data) {
     delivery_t* d_data = (delivery_t*)delivery_data;
 
-    printf("Dostawca %d | %zu\n", d_data->type, d_data->magazine_data->capacity);
+    int sem_id = d_data->sem_id;
+    SHM_DATA* mag_data = d_data->magazine_data;
 
-    return NULL;
+    struct sembuf sem_op;
+    sem_op.sem_num = 0;
+    sem_op.sem_flg = 0;
+    sem_op.sem_op = -1;
+
+    if (semop(sem_id, &sem_op, 1) == -1) {
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+        return (void*)1;
+    }
+
+    if (magazine_available(mag_data)) {
+        switch (d_data->type) {
+            case A: mag_data->a_count++; break;
+            case B: mag_data->b_count++; break;
+            case C: mag_data->c_count++; break;
+            case D: mag_data->d_count++; break;
+        }
+    }
+
+    sem_op.sem_op = 1;
+    if (semop(sem_id, &sem_op, 1) == -1) {
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+        return (void*)1;
+    }
+
+    return (void*)0;
+}
+
+bool magazine_available(SHM_DATA* magazine) {
+    return magazine->a_count + magazine->b_count + 2 * magazine->c_count + 3 * magazine->d_count < magazine->capacity;
 }

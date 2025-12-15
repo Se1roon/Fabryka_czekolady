@@ -33,7 +33,7 @@ int main(void) {
         return 2;
     }
 
-    // Initialize Semaphore Set to 1s
+    // Initialize Semaphore Set to 1s (sem 0 -> magazine sync | sem 1 -> log file sync)
     unsigned short values[2] = {1, 1};
     union semun arg;
     arg.array = values;

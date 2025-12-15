@@ -2,6 +2,7 @@
 #define DOSTAWCY_H
 
 #include <pthread.h>
+#include <stdbool.h>
 
 #include "common.h"
 
@@ -15,5 +16,6 @@ typedef struct {
 } delivery_t;
 
 void* delivery(void* delivery_data);
+bool magazine_available(SHM_DATA* magazine);
 
 #endif
