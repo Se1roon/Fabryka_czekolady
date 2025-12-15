@@ -6,6 +6,13 @@
 // Capacity of magazine
 #define MAG_CAPACITY 100
 
+typedef enum {
+    A,
+    B,
+    C,
+    D
+} component_type;
+
 typedef struct {
     size_t capacity;
     size_t a_count;

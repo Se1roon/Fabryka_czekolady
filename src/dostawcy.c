@@ -41,10 +41,10 @@ int main(void) {
     }
 
     delivery_t delivery_guys[DELIVERY_GUYS_COUNT];
-    delivery_guys[0].type = 1;
-    delivery_guys[1].type = 2;
-    delivery_guys[2].type = 3;
-    delivery_guys[3].type = 4;
+    delivery_guys[0].type = A;
+    delivery_guys[1].type = B;
+    delivery_guys[2].type = C;
+    delivery_guys[3].type = D;
 
     for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
         delivery_guys[d_guy].sem_id = sem_id;
