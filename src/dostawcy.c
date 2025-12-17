@@ -46,14 +46,13 @@ int main(void) {
     delivery_guys[2].type = C;
     delivery_guys[3].type = D;
 
-    // TODO: Probably an infinite loop later, break on signal
-    // TODO: Pthread functions doesn't set errno (consider doing errno = pthread...)
     while (true) {
         for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
             delivery_guys[d_guy].sem_id = sem_id;
             delivery_guys[d_guy].magazine_data = sh_data;
 
-            if (pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void*)&delivery_guys[d_guy]) != 0) {
+            if ((errno = pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void*)&delivery_guys[d_guy])) !=
+                0) {
                 fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n", strerror(errno));
                 return 5;
             }
@@ -61,7 +60,7 @@ int main(void) {
 
         for (int i = 0; i < DELIVERY_GUYS_COUNT; i++) {
             int* rval = NULL;
-            if (pthread_join(delivery_guys[i].tid, (void*)&rval) != 0) {
+            if ((errno = pthread_join(delivery_guys[i].tid, (void*)&rval)) != 0) {
                 fprintf(stderr, "[Dostawcy][ERRN] Failed to wait for thread termination! (%s)\n", strerror(errno));
                 return 6;
             }

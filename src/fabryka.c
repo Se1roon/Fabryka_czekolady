@@ -65,22 +65,21 @@ int main(void) {
     station_data.sem_id = sem_id;
     station_data.magazine_data = sh_data;
 
-    // TODO: Pthread functions doesn't set errno (consider doing errno = pthread...)
-    if (pthread_create(&s1_pid, NULL, station_1, (void*)&station_data) != 0) {
+    if ((errno = pthread_create(&s1_pid, NULL, station_1, (void*)&station_data)) != 0) {
         fprintf(stderr, "[Fabryka][ERRN] Failed to create Station 1! (%s)\n", strerror(errno));
         return 5;
     }
-    if (pthread_create(&s2_pid, NULL, station_2, (void*)&station_data) != 0) {
+    if ((errno = pthread_create(&s2_pid, NULL, station_2, (void*)&station_data)) != 0) {
         fprintf(stderr, "[Fabryka][ERRN] Failed to create Station 2! (%s)\n", strerror(errno));
         return 5;
     }
 
 
-    if (pthread_join(s1_pid, NULL) != 0) {
+    if ((errno = pthread_join(s1_pid, NULL)) != 0) {
         fprintf(stderr, "[Fabryka][ERRN] Failed to wait for Station 1 to finish! (%s)\n", strerror(errno));
         return 6;
     }
-    if (pthread_join(s2_pid, NULL) != 0) {
+    if ((errno = pthread_join(s2_pid, NULL)) != 0) {
         fprintf(stderr, "[Fabryka][ERRN] Failed to wait for Station 2 to finish! (%s)\n", strerror(errno));
         return 6;
     }
@@ -112,7 +111,7 @@ void* station_1(void* station_data) {
 
             write(1, "[Fabryka][Stanowisko 1] Wyprodukowano czekoldę typu 1!\n", 56);
         } else {
-            write(1, "[Fabryka][Stanowisko 1] Brak składników do wyprodukowania czekolady typu 1!\n", 78);
+            // write(1, "[Fabryka][Stanowisko 1] Brak składników do wyprodukowania czekolady typu 1!\n", 78);
         }
 
         sem_op.sem_op = 1;
@@ -149,7 +148,7 @@ void* station_2(void* station_data) {
 
             write(1, "[Fabryka][Stanowisko 2] Wyprodukowano czekoldę typu 2!\n", 56);
         } else {
-            write(1, "[Fabryka][Stanowisko 2] Brak składników do wyprodukowania czekolady typu 2!\n", 78);
+            // write(1, "[Fabryka][Stanowisko 2] Brak składników do wyprodukowania czekolady typu 2!\n", 78);
         }
 
         sem_op.sem_op = 1;
