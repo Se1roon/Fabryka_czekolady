@@ -80,6 +80,8 @@ int main(void) {
         return 6;
     }
 
+    // TODO: Create a new thread for User Interactions
+
     pid_t child_processes[2]; // Dostawcy, Fabryka
 
     // Start child processes

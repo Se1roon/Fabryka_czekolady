@@ -103,7 +103,9 @@ void* station_1(void* station_data) {
             mag_data->b_count--;
             mag_data->c_count--;
 
+#ifdef PRINT_TO_STDOUT
             write(1, "[Fabryka][Stanowisko 1] Wyprodukowano czekoldę typu 1!\n", 56);
+#endif
         } else {
             // write(1, "[Fabryka][Stanowisko 1] Brak składników do wyprodukowania czekolady typu 1!\n", 78);
         }
@@ -141,7 +143,9 @@ void* station_2(void* station_data) {
                 mag_data->b_count--;
                 mag_data->d_count--;
 
+#ifdef PRINT_TO_STDOUT
                 write(1, "[Fabryka][Stanowisko 2] Wyprodukowano czekoldę typu 2!\n", 56);
+#endif
             } else {
                 // write(1, "[Fabryka][Stanowisko 2] Brak składników do wyprodukowania czekolady typu 2!\n", 78);
             }

@@ -110,17 +110,7 @@ void* delivery(void* delivery_data) {
         return (void*)1;
     }
 
-    /*
-    printf(
-        "Dostawca %d | A_count = %zu | B_count = %zu | C_count = %zu | D_count = %zu\n",
-        d_data->type,
-        mag_data->a_count,
-        mag_data->b_count,
-        mag_data->c_count,
-        mag_data->d_count);
-        */
     size_t magazine_count = get_magazine_count(mag_data);
-
     switch (d_data->type) {
         case A: {
             if (mag_data->capacity - magazine_count >= 1)
