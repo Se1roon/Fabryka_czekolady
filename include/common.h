@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 // Capacity of magazine
-#define MAG_CAPACITY 100
+#define MAG_CAPACITY 10000
 
 typedef enum {
     A,

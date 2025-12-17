@@ -1,262 +1,164 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <signal.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <pthread.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
 
-#include "fabryka.h"
-#include "logging.h"
+#include "../include/common.h"
+#include "../include/fabryka.h"
 
-// TODO: Implement synchronized logging to file
-
-magazyn_t magazyn;
-
-bool magazine_open = true;
-bool slaves_work = true;
-
-int log_fd = -1;
-
-// #define TEST_RESTORE
 
 int main(void) {
-	log_fd = init_log();
-	if (log_fd < 0) {
-		fprintf(stderr, "[Fabryka][main][LOG][ERRN] Unable to initialize logging system!\n");
-		return 6;
-	}
+    /*
+    struct sigaction sig_action;
+    sig_action.sa_handler = sig_handler;
+    sigemptyset(&sig_action.sa_mask);
+    sig_action.sa_flags = SA_RESTART;
 
-	pthread_t s1_pid;	// TID of stanowisko_1
-	pthread_t s2_pid;	// TID of stanowisko_2
-	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-	unsigned char terrn = 1;	// Number indicating which thread (or signal) is responsible for the error 
-								// 1 - stanowisko_1 (or SIGUSR1)
-								// 2 - stanowisko_2 (or SIGUSR2)
+    if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {
+        terrn = 1;
+        goto errn_sig_handler;
+    }
+    if (sigaction(SIGUSR2, &sig_action, NULL) != 0) {
+        terrn = 2;
+        goto errn_sig_handler;
+    }
+    */
 
-	#ifdef TEST_RESTORE
-		if (restore_state() != 0) {
-			fprintf(stderr, "[Fabryka][main][ERRN] Something went wrong while restoring magazine's state!\n");
-			write_log(log_fd, "[Fabryka][main][ERRN] Something went wrong while restoring magazine's state!\n");
-			return 5;
-		}
-	#else
-		magazyn.capacity = 210;
-		magazyn.a_count = 20;
-		magazyn.b_count = 20;
-		magazyn.c_count = 20;
-		magazyn.d_count = 20;
-	#endif
+    // Obtain IPC key
+    key_t ipc_key = ftok(".", 69);
+    if (ipc_key == -1) {
+        fprintf(stderr, "[Fabryka][ERRN] Unable to create IPC Key! (%s)\n", strerror(errno));
+        return 1;
+    }
 
-	struct sigaction sig_action;
-	sig_action.sa_handler = sig_handler;
-	sigemptyset(&sig_action.sa_mask);
-	sig_action.sa_flags = SA_RESTART;
+    // Join the Semaphore Set
+    int sem_id = semget(ipc_key, 2, IPC_CREAT | 0600);
+    if (sem_id == -1) {
+        fprintf(stderr, "[Fabryka][ERRN] Unable to join Semaphore Set! (%s)\n", strerror(errno));
+        return 2;
+    }
 
-	if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {
-		terrn = 1;
-		goto errn_sig_handler;
-	}
-	if (sigaction(SIGUSR2, &sig_action, NULL) != 0) {
-		terrn = 2;
-		goto errn_sig_handler;
-	}
+    // Join the Shared Memory segment
+    int shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | 0600);
+    if (shm_id == -1) {
+        fprintf(stderr, "[Fabryka][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
+        return 3;
+    }
 
-	if (pthread_create(&s1_pid, NULL, stanowisko_1, (void *)&lock) != 0) {
-		terrn = 1;
-		goto errn_thread_create;
-	}
-	if (pthread_create(&s2_pid, NULL, stanowisko_2, (void *)&lock) != 0) {
-		terrn = 2;
-		goto errn_thread_create;
-	}
+    // Attach to Shared Memory
+    SHM_DATA* sh_data = (SHM_DATA*)shmat(shm_id, 0, 0);
+    if (sh_data == (void*)-1) {
+        fprintf(stderr, "[Fabryka][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
+        return 4;
+    }
 
-	void *ret_val = NULL;
+    pthread_t s1_pid; // TID of stanowisko_1
+    pthread_t s2_pid; // TID of stanowisko_2
 
-	if (pthread_join(s1_pid, &ret_val) != 0) {
-		terrn = 1;
-		goto errn_thread_join;
-	}
-	printf("\n[Fabryka][main][INFO] Thread (stanowisko_1) exited with code %ld\n", (long)ret_val);
+    station_t station_data;
+    station_data.sem_id = sem_id;
+    station_data.magazine_data = sh_data;
 
-	if (pthread_join(s2_pid, &ret_val) != 0) {
-		terrn = 2;
-		goto errn_thread_join;
-	}
-	printf("[Fabryka][main][INFO] Thread (stanowisko_2) exited with code %ld\n", (long)ret_val);
+    // TODO: Pthread functions doesn't set errno (consider doing errno = pthread...)
+    if (pthread_create(&s1_pid, NULL, station_1, (void*)&station_data) != 0) {
+        fprintf(stderr, "[Fabryka][ERRN] Failed to create Station 1! (%s)\n", strerror(errno));
+        return 5;
+    }
+    if (pthread_create(&s2_pid, NULL, station_2, (void*)&station_data) != 0) {
+        fprintf(stderr, "[Fabryka][ERRN] Failed to create Station 2! (%s)\n", strerror(errno));
+        return 5;
+    }
 
-	printf("\nStan magazynu: \n");
-	printf("A: %zu\n", magazyn.a_count);
-	printf("B: %zu\n", magazyn.b_count);
-	printf("C: %zu\n", magazyn.c_count);
-	printf("D: %zu\n", magazyn.d_count);
 
-	if (save_state() != 0) {
-		fprintf(stderr, "[Fabryka][main][ERRN] Something went wrong while saving magazine's state!\n");
-		return 4;
-	}
+    if (pthread_join(s1_pid, NULL) != 0) {
+        fprintf(stderr, "[Fabryka][ERRN] Failed to wait for Station 1 to finish! (%s)\n", strerror(errno));
+        return 6;
+    }
+    if (pthread_join(s2_pid, NULL) != 0) {
+        fprintf(stderr, "[Fabryka][ERRN] Failed to wait for Station 2 to finish! (%s)\n", strerror(errno));
+        return 6;
+    }
 
-	return 0;
-
-	// Errors
-errn_sig_handler:
-	fprintf(stderr, "[Fabryka][SIG][ERRN] Can't catch signal SIGUSR%d\n", terrn);
-	return 1;
-errn_thread_create:
-	fprintf(stderr, "[Fabryka][main][ERRN] Failed to create thread (stanowisko_%u)!\n", terrn);
-	return 2;
-errn_thread_join:
-	fprintf(stderr, "[Fabryka][main][ERRN] Failed to join thread (stanowisko_%u)[TID=%lu]\n", terrn, terrn == 1 ? s1_pid : s2_pid);
-	return 3;
+    return 0;
 }
 
+void* station_1(void* station_data) {
+    station_t* s_data = (station_t*)station_data;
 
-void *stanowisko_1(void *lock) {
-	pthread_mutex_t *mutex_lock = (pthread_mutex_t *)lock;
-	unsigned long errn_code = 0;	// 0 - success, no error
-									// other - error
+    int sem_id = s_data->sem_id;
+    SHM_DATA* mag_data = s_data->magazine_data;
 
-	while (slaves_work) {
-		if (magazine_open) {
-			// Acquire the Lock
-			if (pthread_mutex_lock(mutex_lock) != 0) {
-				fprintf(stderr, "[Fabryka][stanowisko 1][TID=%lu][ERRN] Failed to acquire lock!\n", pthread_self());
-				write_log(log_fd, "[Fabryka][stanowisko 1][TID=%lu][ERRN] Failed to acquire lock!\n", pthread_self());
-				return (void *)1;
-			}
+    struct sembuf sem_op;
+    sem_op.sem_num = 0;
+    sem_op.sem_flg = 0;
 
-			// Do stuff on Critical Section
-			if (magazyn.a_count > 0 && magazyn.b_count > 0 && magazyn.c_count > 0) {
-				magazyn.a_count--;
-				magazyn.b_count--;
-				magazyn.c_count--;
-			} else {
-				errn_code = 2;
-				goto release_lock; // Could omit this because it will flow naturally into it, but
-								   // something in the future might go between goto and the label
-			}
+    while (true) {
+        sem_op.sem_op = -1;
+        if (semop(sem_id, &sem_op, 1) == -1) {
+            fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+            return (void*)1;
+        }
 
-			// Release the Lock
-			release_lock:
-				if (pthread_mutex_unlock(mutex_lock) != 0) {
-					fprintf(stderr, "[Fabryka][stanowisko 1][TID=%lu][ERRN] Failed to release the lock!\n", pthread_self());
-					write_log(log_fd, "[Fabryka][stanowisko 1][TID=%lu][ERRN] Failed to release the lock!\n", pthread_self());
-					return (void *)1;
-				}
+        if (mag_data->a_count > 0 && mag_data->b_count > 0 && mag_data->c_count > 0) {
+            mag_data->a_count--;
+            mag_data->b_count--;
+            mag_data->c_count--;
 
-				if (errn_code != 0) {
-					printf("[Fabryka][stanowisko 1][WARN] Brak składników w magazynie!\n");
-					write_log(log_fd, "[Fabryka][stanowisko 1][WARN] Brak składników w magazynie!\n");
-					return (void *)errn_code;
-				}
+            write(1, "[Fabryka][Stanowisko 1] Wyprodukowano czekoldę typu 1!\n", 56);
+        } else {
+            write(1, "[Fabryka][Stanowisko 1] Brak składników do wyprodukowania czekolady typu 1!\n", 78);
+        }
 
-				printf("[Fabryka][stanowisko 1][INFO] Wytworzono czekoladę typu 1!\n");
-				write_log(log_fd, "[Fabryka][stanowisko 1][INFO] Wytworzono czekoladę typu 1!\n");
-		} else {
-			printf("[Fabryka][stanowisko 1][INFO] Magazine closed, can't produce!\n");
-			write_log(log_fd, "[Fabryka][stanowisko 1][INFO] Magazine closed, can't produce!\n");
-		}
-			
-	}
+        sem_op.sem_op = 1;
+        if (semop(sem_id, &sem_op, 1) == -1) {
+            fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+            return (void*)1;
+        }
+    }
 
-	return (void *)0;
+    return (void*)0;
 }
 
-void *stanowisko_2(void *lock) {
-	pthread_mutex_t *mutex_lock = (pthread_mutex_t *)lock;
-	unsigned long errn_code = 0;	// 0 - success, no error
-									// other - error
+void* station_2(void* station_data) {
+    station_t* s_data = (station_t*)station_data;
 
-	while (slaves_work) {
-		if (magazine_open) {
-			// Acquire the Lock
-			if (pthread_mutex_lock(mutex_lock) != 0) {
-				fprintf(stderr, "[Fabryka][stanowisko 2][TID=%lu][ERRN] Failed to acquire lock!\n", pthread_self());
-				write_log(log_fd, "[Fabryka][stanowisko 2][TID=%lu][ERRN] Failed to acquire lock!\n", pthread_self());
-				return (void *)1;
-			}
+    int sem_id = s_data->sem_id;
+    SHM_DATA* mag_data = s_data->magazine_data;
 
-			// Do stuff on Critical Section
-			if (magazyn.a_count > 0 && magazyn.b_count > 0 && magazyn.d_count > 0) {
-				magazyn.a_count--;
-				magazyn.b_count--;
-				magazyn.d_count--;
-			} else {
-				errn_code = 2;
-				goto release_lock; // Could omit this because it will flow naturally into it, but
-								   // something in the future might go between goto and the label
-			}
+    struct sembuf sem_op;
+    sem_op.sem_num = 0;
+    sem_op.sem_flg = 0;
 
-			release_lock:
-				if (pthread_mutex_unlock(mutex_lock) != 0) {
-					fprintf(stderr, "[Fabryka][stanowisko 2][TID=%lu][ERRN] Failed to release the lock!\n", pthread_self());
-					write_log(log_fd, "[Fabryka][stanowisko 2][TID=%lu][ERRN] Failed to release the lock!\n", pthread_self());
-					return (void *)1;
-				}
+    while (true) {
+        sem_op.sem_op = -1;
+        if (semop(sem_id, &sem_op, 1) == -1) {
+            fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+            return (void*)1;
+        }
 
-				if (errn_code != 0) {
-					printf("[Fabryka][stanowisko 2][WARN] Brak składników w magazynie!\n");
-					write_log(log_fd, "[Fabryka][stanowisko 2][WARN] Brak składników w magazynie!\n");
-					return (void *)errn_code;
-				}
+        if (mag_data->a_count && mag_data->b_count && mag_data->d_count) {
+            mag_data->a_count--;
+            mag_data->b_count--;
+            mag_data->d_count--;
 
-				printf("[Fabryka][stanowisko 2][INFO] Wytworzono czekoladę typu 2!\n");
-				write_log(log_fd, "[Fabryka][stanowisko 2][INFO] Wytworzono czekoladę typu 2!\n");
-		} else {
-			printf("[Fabryka][stanowisko 2][INFO] Magazine closed, can't produce!\n");
-			write_log(log_fd, "[Fabryka][stanowisko 2][INFO] Magazine closed, can't produce!\n");
-		}
-	}
+            write(1, "[Fabryka][Stanowisko 2] Wyprodukowano czekoldę typu 2!\n", 56);
+        } else {
+            write(1, "[Fabryka][Stanowisko 2] Brak składników do wyprodukowania czekolady typu 2!\n", 78);
+        }
 
-	return (void *)0;
+        sem_op.sem_op = 1;
+        if (semop(sem_id, &sem_op, 1) == -1) {
+            fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+            return (void*)1;
+        }
+    }
+
+
+    return (void*)0;
 }
-
-int restore_state() {
-	int fd = open(SAVE_FILE, O_RDONLY);
-	if (fd < 0) {
-		fprintf(stderr, "[Fabryka][RESTORE][ERRN] Unable to open file '%s'\n", SAVE_FILE);
-		return 1;
-	}
-
-	if (read(fd, &magazyn, sizeof(magazyn)) < 0) {
-		fprintf(stderr, "[Fabryka][RESTORE][ERRN] Unable to read from file '%s'\n", SAVE_FILE);
-		close(fd);
-		return 2;
-	}
-
-	close(fd);
-	return 0;
-}
-
-int save_state() {
-	int fd = open(SAVE_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-	if (fd < 0) {
-		fprintf(stderr, "[Fabryka][SAVE][ERRN] Unable to open file '%s'\n", SAVE_FILE);
-		return 1;
-	}
-
-	if (write(fd, &magazyn, sizeof(magazyn)) < 0) {
-		fprintf(stderr, "[Fabryka][SAVE][ERRN] Unable to write to file '%s'\n", SAVE_FILE);
-		close(fd);
-		return 2;
-	}
-
-	close(fd);
-	return 0;
-}
-
-static void sig_handler(int signo) {
-	// Using 'write' syscall instead of just printf to avoid deadlock
-	if (signo == SIGUSR1) {
-		write(1, "[Fabryka][SIG][INFO] Received signal: polecenie_1\n", 50);
-		slaves_work = false;
-	} else if (signo == SIGUSR2) {
-		write(1, "[Fabryka][SIG][INFO] Received signal: polecenie_2\n", 50);
-		magazine_open = !magazine_open;
-	} else {
-		write(1, "[Fabryka][SIG][WARN] Received unknown signal\n", 45);
-	}
-
-	return;
-}
-

@@ -47,6 +47,7 @@ int main(void) {
     delivery_guys[3].type = D;
 
     // TODO: Probably an infinite loop later, break on signal
+    // TODO: Pthread functions doesn't set errno (consider doing errno = pthread...)
     while (magazine_available(sh_data)) {
         for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
             delivery_guys[d_guy].sem_id = sem_id;

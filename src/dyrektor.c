@@ -64,10 +64,10 @@ int main(void) {
         return 6;
     }
 
-    pid_t child_processes[1]; // Dostawcy, Fabryka
+    pid_t child_processes[2]; // Dostawcy, Fabryka
 
     // Start child processes
-    for (int cproc = 0; cproc < 1; cproc++) {
+    for (int cproc = 0; cproc < 2; cproc++) {
         pid_t cpid = fork();
         switch (cpid) {
             case -1: {
@@ -89,7 +89,7 @@ int main(void) {
     }
 
     // Wait for child processes to finish
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 2; i++) {
         pid_t child_pid = child_processes[i];
 
         int status = -1;
