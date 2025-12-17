@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
@@ -17,8 +18,23 @@ union semun {
 };
 
 void clean_up(int sem_id, int shm_id);
+void* sig_handler(int sig_num);
+
+int sem_id;
+int shm_id;
 
 int main(void) {
+    struct sigaction sig_action;
+    sig_action.sa_handler = (void*)sig_handler;
+    sigemptyset(&sig_action.sa_mask);
+    sig_action.sa_flags = SA_RESTART;
+
+    if (sigaction(SIGINT, &sig_action, NULL) != 0) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
+        return -1;
+    }
+
+
     // Obtain IPC key
     key_t ipc_key = ftok(".", 69);
     if (ipc_key == -1) {
@@ -27,7 +43,7 @@ int main(void) {
     }
 
     // Create Semaphore Set
-    int sem_id = semget(ipc_key, 2, IPC_CREAT | IPC_EXCL | 0600);
+    sem_id = semget(ipc_key, 2, IPC_CREAT | IPC_EXCL | 0600);
     if (sem_id == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to create Semaphore Set! (%s)\n", strerror(errno));
         return 2;
@@ -44,7 +60,7 @@ int main(void) {
     }
 
     // Create Shared Memory segment (initialized with 0s)
-    int shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | IPC_EXCL | 0600);
+    shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | IPC_EXCL | 0600);
     if (shm_id == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
         clean_up(sem_id, -1);
@@ -117,4 +133,14 @@ void clean_up(int sem_id, int shm_id) {
     }
 
     return;
+}
+
+void* sig_handler(int sig_num) {
+    if (sig_num == SIGINT) {
+        write(1, "[Dyrektor][SIGNAL] Received SIGINT!\n", 38);
+        clean_up(sem_id, shm_id);
+        exit(0);
+    }
+
+    return NULL;
 }
