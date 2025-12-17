@@ -16,6 +16,6 @@ typedef struct {
 } delivery_t;
 
 void* delivery(void* delivery_data);
-bool magazine_available(SHM_DATA* magazine);
+size_t get_magazine_count(SHM_DATA* magazine);
 
 #endif

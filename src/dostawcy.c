@@ -48,7 +48,7 @@ int main(void) {
 
     // TODO: Probably an infinite loop later, break on signal
     // TODO: Pthread functions doesn't set errno (consider doing errno = pthread...)
-    while (magazine_available(sh_data)) {
+    while (true) {
         for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
             delivery_guys[d_guy].sem_id = sem_id;
             delivery_guys[d_guy].magazine_data = sh_data;
@@ -70,12 +70,6 @@ int main(void) {
             // Now it is not needed because the flow will fall into it nevertheless
         }
     }
-
-
-    printf("A count: %zu\n", sh_data->a_count);
-    printf("B count: %zu\n", sh_data->b_count);
-    printf("C count: %zu\n", sh_data->c_count);
-    printf("D count: %zu\n", sh_data->d_count);
 
 
     // Detach from SHM
@@ -103,12 +97,37 @@ void* delivery(void* delivery_data) {
         return (void*)1;
     }
 
-    if (magazine_available(mag_data)) {
-        switch (d_data->type) {
-            case A: mag_data->a_count++; break;
-            case B: mag_data->b_count++; break;
-            case C: mag_data->c_count++; break;
-            case D: mag_data->d_count++; break;
+    /*
+    printf(
+        "Dostawca %d | A_count = %zu | B_count = %zu | C_count = %zu | D_count = %zu\n",
+        d_data->type,
+        mag_data->a_count,
+        mag_data->b_count,
+        mag_data->c_count,
+        mag_data->d_count);
+        */
+    size_t magazine_count = get_magazine_count(mag_data);
+
+    switch (d_data->type) {
+        case A: {
+            if (mag_data->capacity - magazine_count >= 1)
+                mag_data->a_count = mag_data->a_count + 2;
+            break;
+        }
+        case B: {
+            if (mag_data->capacity - magazine_count >= 1)
+                mag_data->b_count = mag_data->b_count + 2;
+            break;
+        }
+        case C: {
+            if (mag_data->capacity - magazine_count >= 2)
+                mag_data->c_count++;
+            break;
+        }
+        case D: {
+            if (mag_data->capacity - magazine_count >= 3)
+                mag_data->d_count++;
+            break;
         }
     }
 
@@ -121,6 +140,6 @@ void* delivery(void* delivery_data) {
     return (void*)0;
 }
 
-bool magazine_available(SHM_DATA* magazine) {
-    return magazine->a_count + magazine->b_count + 2 * magazine->c_count + 3 * magazine->d_count < magazine->capacity;
+size_t get_magazine_count(SHM_DATA* magazine) {
+    return magazine->a_count + magazine->b_count + 2 * magazine->c_count + 2 * magazine->d_count;
 }
