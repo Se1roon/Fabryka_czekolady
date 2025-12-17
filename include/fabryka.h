@@ -18,6 +18,6 @@ void* station_2(void* lock);
 int restore_state();
 int save_state();
 
-static void sig_handler(int signo);
+static void* sig_handler(int sig_num);
 
 #endif

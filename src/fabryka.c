@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -12,23 +13,16 @@
 #include "../include/common.h"
 #include "../include/fabryka.h"
 
+bool stations_work = true;
 
 int main(void) {
-    /*
     struct sigaction sig_action;
-    sig_action.sa_handler = sig_handler;
+    sig_action.sa_handler = (void*)sig_handler;
     sigemptyset(&sig_action.sa_mask);
     sig_action.sa_flags = SA_RESTART;
 
-    if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {
-        terrn = 1;
-        goto errn_sig_handler;
-    }
-    if (sigaction(SIGUSR2, &sig_action, NULL) != 0) {
-        terrn = 2;
-        goto errn_sig_handler;
-    }
-    */
+    if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {}
+
 
     // Obtain IPC key
     key_t ipc_key = ftok(".", 69);
@@ -135,29 +129,41 @@ void* station_2(void* station_data) {
     sem_op.sem_flg = 0;
 
     while (true) {
-        sem_op.sem_op = -1;
-        if (semop(sem_id, &sem_op, 1) == -1) {
-            fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
-            return (void*)1;
-        }
+        if (stations_work) {
+            sem_op.sem_op = -1;
+            if (semop(sem_id, &sem_op, 1) == -1) {
+                fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+                return (void*)1;
+            }
 
-        if (mag_data->a_count && mag_data->b_count && mag_data->d_count) {
-            mag_data->a_count--;
-            mag_data->b_count--;
-            mag_data->d_count--;
+            if (mag_data->a_count && mag_data->b_count && mag_data->d_count) {
+                mag_data->a_count--;
+                mag_data->b_count--;
+                mag_data->d_count--;
 
-            write(1, "[Fabryka][Stanowisko 2] Wyprodukowano czekoldę typu 2!\n", 56);
-        } else {
-            // write(1, "[Fabryka][Stanowisko 2] Brak składników do wyprodukowania czekolady typu 2!\n", 78);
-        }
+                write(1, "[Fabryka][Stanowisko 2] Wyprodukowano czekoldę typu 2!\n", 56);
+            } else {
+                // write(1, "[Fabryka][Stanowisko 2] Brak składników do wyprodukowania czekolady typu 2!\n", 78);
+            }
 
-        sem_op.sem_op = 1;
-        if (semop(sem_id, &sem_op, 1) == -1) {
-            fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
-            return (void*)1;
+            sem_op.sem_op = 1;
+            if (semop(sem_id, &sem_op, 1) == -1) {
+                fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+                return (void*)1;
+            }
         }
     }
 
 
     return (void*)0;
+}
+
+
+void* sig_handler(int sig_num) {
+    if (sig_num == SIGUSR1) {
+        write(1, "[Fabryka][SIGNAL] Received stations_toggle signal!\n", 53);
+        stations_work = !stations_work;
+    }
+
+    return NULL;
 }

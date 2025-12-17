@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
 #include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -10,8 +11,19 @@
 #include "../include/common.h"
 #include "../include/dostawcy.h"
 
+bool d_guys_work = true;
 
 int main(void) {
+    struct sigaction sig_action;
+    sig_action.sa_handler = (void*)sig_handler;
+    sigemptyset(&sig_action.sa_mask);
+    sig_action.sa_flags = SA_RESTART;
+
+    if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
+        return -1;
+    }
+
     // Obtain IPC key
     key_t ipc_key = ftok(".", 69);
     if (ipc_key == -1) {
@@ -47,26 +59,28 @@ int main(void) {
     delivery_guys[3].type = D;
 
     while (true) {
-        for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
-            delivery_guys[d_guy].sem_id = sem_id;
-            delivery_guys[d_guy].magazine_data = sh_data;
+        if (d_guys_work) {
+            for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
+                delivery_guys[d_guy].sem_id = sem_id;
+                delivery_guys[d_guy].magazine_data = sh_data;
 
-            if ((errno = pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void*)&delivery_guys[d_guy])) !=
-                0) {
-                fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n", strerror(errno));
-                return 5;
-            }
-        }
-
-        for (int i = 0; i < DELIVERY_GUYS_COUNT; i++) {
-            int* rval = NULL;
-            if ((errno = pthread_join(delivery_guys[i].tid, (void*)&rval)) != 0) {
-                fprintf(stderr, "[Dostawcy][ERRN] Failed to wait for thread termination! (%s)\n", strerror(errno));
-                return 6;
+                if ((errno = pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void*)&delivery_guys[d_guy])) !=
+                    0) {
+                    fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n", strerror(errno));
+                    return 5;
+                }
             }
 
-            // Remember to check rval for -1 and detach
-            // Now it is not needed because the flow will fall into it nevertheless
+            for (int i = 0; i < DELIVERY_GUYS_COUNT; i++) {
+                int* rval = NULL;
+                if ((errno = pthread_join(delivery_guys[i].tid, (void*)&rval)) != 0) {
+                    fprintf(stderr, "[Dostawcy][ERRN] Failed to wait for thread termination! (%s)\n", strerror(errno));
+                    return 6;
+                }
+
+                // Remember to check rval for -1 and detach
+                // Now it is not needed because the flow will fall into it nevertheless
+            }
         }
     }
 
@@ -141,4 +155,13 @@ void* delivery(void* delivery_data) {
 
 size_t get_magazine_count(SHM_DATA* magazine) {
     return magazine->a_count + magazine->b_count + 2 * magazine->c_count + 2 * magazine->d_count;
+}
+
+void* sig_handler(int sig_num) {
+    if (sig_num == SIGUSR1) {
+        write(1, "[Dostawcy][SIGNAL] Received toggle_delivery signal!\n", 54);
+        d_guys_work = !d_guys_work;
+    }
+
+    return NULL;
 }
