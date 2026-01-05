@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#define PRINT_TO_STDOUT
+// #define PRINT_TO_STDOUT
 
 // Capacity of magazine
 #define MAG_CAPACITY 10000

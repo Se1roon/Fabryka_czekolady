@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <pthread.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
@@ -10,15 +11,13 @@
 #include <unistd.h>
 
 #include "../include/common.h"
+#include "../include/dyrektor.h"
 
 union semun {
     int value;
     struct semid_ds* buf;
     unsigned short* array;
 };
-
-void clean_up(int sem_id, int shm_id);
-void* sig_handler(int sig_num);
 
 int sem_id;
 int shm_id;
@@ -33,7 +32,6 @@ int main(void) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
         return -1;
     }
-
 
     // Obtain IPC key
     key_t ipc_key = ftok(".", 69);
@@ -80,9 +78,13 @@ int main(void) {
         return 6;
     }
 
-    // TODO: Create a new thread for User Interactions
-
     pid_t child_processes[2]; // Dostawcy, Fabryka
+
+    pthread_t uint_tid; // User interface TID
+    if ((errno = pthread_create(&uint_tid, NULL, handle_user_interface, (void*)child_processes)) != 0) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to create Thread! (%s)\n", strerror(errno));
+        return 9;
+    }
 
     // Start child processes
     for (int cproc = 0; cproc < 2; cproc++) {
@@ -120,6 +122,11 @@ int main(void) {
             printf("[Dyrektor] Child process %d has terminated (code %d)\n", child_pid, WEXITSTATUS(status));
     }
 
+    if ((errno = pthread_join(uint_tid, NULL)) != 0) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for User Interface Thread to finish! (%s)\n", strerror(errno));
+        return 12;
+    }
+
     clean_up(sem_id, shm_id);
     return 0;
 }
@@ -135,6 +142,30 @@ void clean_up(int sem_id, int shm_id) {
     }
 
     return;
+}
+
+void* handle_user_interface(void* child_pids) {
+    pid_t* children = (pid_t*)child_pids;
+
+    char* command = NULL;
+    size_t command_len = -1;
+    while (1) {
+        printf("> ");
+        if (getline(&command, &command_len, stdin) == -1) {
+            fprintf(stderr, "Unable to read user's command\n");
+        } else {
+            command[command_len-- - 1] = 0; // Remove the trailing newline
+
+            if (strncmp(command, "quit", 4) == 0) {
+                kill(children[0], SIGINT);
+                kill(children[1], SIGINT);
+                break;
+            }
+        }
+    }
+
+    free(command);
+    return NULL;
 }
 
 void* sig_handler(int sig_num) {

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "../include/common.h"
+#include "common.h"
 
 #define SAVE_FILE "./.magazyn"
 

@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>
@@ -22,6 +23,7 @@ int main(void) {
     sig_action.sa_flags = SA_RESTART;
 
     if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {}
+    if (sigaction(SIGINT, &sig_action, NULL) != 0) {}
 
 
     // Obtain IPC key
@@ -167,6 +169,9 @@ void* sig_handler(int sig_num) {
     if (sig_num == SIGUSR1) {
         write(1, "[Fabryka][SIGNAL] Received stations_toggle signal!\n", 53);
         stations_work = !stations_work;
+    } else if (sig_num == SIGINT) {
+        write(1, "[Fabryka][SIGNAL] Received SIGINT signal!\n", 44);
+        exit(0);
     }
 
     return NULL;

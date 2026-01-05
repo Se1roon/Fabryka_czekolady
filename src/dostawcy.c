@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
@@ -23,6 +24,11 @@ int main(void) {
         fprintf(stderr, "[Dostawcy][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
         return -1;
     }
+    if (sigaction(SIGINT, &sig_action, NULL) != 0) {
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
+        return -1;
+    }
+
 
     // Obtain IPC key
     key_t ipc_key = ftok(".", 69);
@@ -151,6 +157,9 @@ void* sig_handler(int sig_num) {
     if (sig_num == SIGUSR1) {
         write(1, "[Dostawcy][SIGNAL] Received toggle_delivery signal!\n", 54);
         d_guys_work = !d_guys_work;
+    } else if (sig_num == SIGINT) {
+        write(1, "[Dostawcy][SIGNAL] Received SIGINT signal!\n", 45);
+        exit(0);
     }
 
     return NULL;

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CFLAGS="-Wall -Wextra"
+CFLAGS="-Wall -Wextra -g"
 
 clang -o ./bin/fabryka ./src/fabryka.c $CFLAGS
 clang -o ./bin/dostawcy ./src/dostawcy.c $CFLAGS
