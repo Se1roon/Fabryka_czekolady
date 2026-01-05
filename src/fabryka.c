@@ -104,7 +104,7 @@ void* station_1(void* station_data) {
             mag_data->a_count--;
             mag_data->b_count--;
             mag_data->c_count--;
-
+            mag_data->type1_produced++;
 #ifdef PRINT_TO_STDOUT
             write(1, "[Fabryka][Stanowisko 1] Wyprodukowano czekoldę typu 1!\n", 56);
 #endif
@@ -144,6 +144,7 @@ void* station_2(void* station_data) {
                 mag_data->a_count--;
                 mag_data->b_count--;
                 mag_data->d_count--;
+                mag_data->type2_produced++;
 
 #ifdef PRINT_TO_STDOUT
                 write(1, "[Fabryka][Stanowisko 2] Wyprodukowano czekoldę typu 2!\n", 56);

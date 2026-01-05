@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <signal.h>
 #include <pthread.h>
@@ -72,16 +73,21 @@ int main(void) {
         return 5;
     }
     *(size_t*)shm = (size_t)MAG_CAPACITY;
+    /*
     if (shmdt(shm) == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to deattach from Shared memory segment! (%s)\n", strerror(errno));
         clean_up(sem_id, shm_id);
         return 6;
     }
+        */
 
     pid_t child_processes[2]; // Dostawcy, Fabryka
 
+    UI_data ui_data;
+    ui_data.children = child_processes;
+    ui_data.data = shm;
     pthread_t uint_tid; // User interface TID
-    if ((errno = pthread_create(&uint_tid, NULL, handle_user_interface, (void*)child_processes)) != 0) {
+    if ((errno = pthread_create(&uint_tid, NULL, handle_user_interface, (void*)&ui_data)) != 0) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to create Thread! (%s)\n", strerror(errno));
         return 9;
     }
@@ -144,12 +150,15 @@ void clean_up(int sem_id, int shm_id) {
     return;
 }
 
-void* handle_user_interface(void* child_pids) {
-    pid_t* children = (pid_t*)child_pids;
+void* handle_user_interface(void* ui_data) {
+    UI_data* u_data = (UI_data*)ui_data;
+
+    bool f_work = true;
+    bool d_work = true;
 
     char* command = NULL;
     size_t command_len = -1;
-    while (1) {
+    while (true) {
         printf("> ");
         if (getline(&command, &command_len, stdin) == -1) {
             fprintf(stderr, "Unable to read user's command\n");
@@ -157,9 +166,24 @@ void* handle_user_interface(void* child_pids) {
             command[command_len-- - 1] = 0; // Remove the trailing newline
 
             if (strncmp(command, "quit", 4) == 0) {
-                kill(children[0], SIGINT);
-                kill(children[1], SIGINT);
+                kill(u_data->children[0], SIGINT);
+                kill(u_data->children[1], SIGINT);
                 break;
+            } else if (strncmp(command, "stats", 5) == 0) {
+                struct sembuf sem_op;
+                sem_op.sem_num = 0;
+                sem_op.sem_flg = 0;
+                sem_op.sem_op = -1;
+                semop(sem_id, &sem_op, 1);
+
+                printf("Fabryka is %s\n", f_work ? "ON" : "OFF");
+                printf("Dostawcy is %s\n\n", d_work ? "ON" : "OFF");
+
+                printf("Type 1 chocolate produced: %zu\n", u_data->data->type1_produced);
+                printf("Type 2 chocolate produced: %zu\n", u_data->data->type2_produced);
+
+                sem_op.sem_op = 1;
+                semop(sem_id, &sem_op, 1);
             }
         }
     }

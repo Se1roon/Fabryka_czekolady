@@ -21,7 +21,8 @@ typedef struct {
     size_t b_count;
     size_t c_count;
     size_t d_count;
-    // TODO: Add place to store count of produced items
+    size_t type1_produced;
+    size_t type2_produced;
 } SHM_DATA;
 
 
