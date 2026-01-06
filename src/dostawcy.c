@@ -155,10 +155,14 @@ size_t get_magazine_count(SHM_DATA* magazine) {
 
 void* sig_handler(int sig_num) {
     if (sig_num == SIGUSR1) {
+#ifdef PRINT_TO_STDOUT
         write(1, "[Dostawcy][SIGNAL] Received toggle_delivery signal!\n", 54);
+#endif
         d_guys_work = !d_guys_work;
     } else if (sig_num == SIGINT) {
+#ifdef PRINT_TO_STDOUT
         write(1, "[Dostawcy][SIGNAL] Received SIGINT signal!\n", 45);
+#endif
         exit(0);
     }
 

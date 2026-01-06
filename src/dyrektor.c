@@ -158,6 +158,8 @@ void* handle_user_interface(void* ui_data) {
 
     char* command = NULL;
     size_t command_len = -1;
+
+    printf("Type help to see the list of available commands!\n\n");
     while (true) {
         printf("> ");
         if (getline(&command, &command_len, stdin) == -1) {
@@ -184,6 +186,23 @@ void* handle_user_interface(void* ui_data) {
 
                 sem_op.sem_op = 1;
                 semop(sem_id, &sem_op, 1);
+            } else if (strncmp(command, "td", 2) == 0) {
+                // Sent SIGUSR1 to Dostawcy
+                kill(u_data->children[0], SIGUSR1);
+                d_work = !d_work;
+                printf("Dostawcy switched to %s\n", d_work ? "ON" : "OFF");
+            } else if (strncmp(command, "tf", 2) == 0) {
+                // Sent SIGUSR1 to Fabryka
+                kill(u_data->children[1], SIGUSR1);
+                f_work = !f_work;
+                printf("Fabryka switched to %s\n", f_work ? "ON" : "OFF");
+            } else if (strncmp(command, "help", 4) == 0) {
+                printf(
+                    "\nstats - Shows the state of factory and deliveries as well as the number of chocolate "
+                    "produced.\n");
+                printf("td    - Toggles the deliveries\n");
+                printf("tf    - Toggles the factory\n");
+                printf("quit  - Quits\n\n");
             }
         }
     }

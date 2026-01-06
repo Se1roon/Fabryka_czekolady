@@ -168,10 +168,14 @@ void* station_2(void* station_data) {
 
 void* sig_handler(int sig_num) {
     if (sig_num == SIGUSR1) {
+#ifdef PRINT_TO_STDOUT
         write(1, "[Fabryka][SIGNAL] Received stations_toggle signal!\n", 53);
+#endif
         stations_work = !stations_work;
     } else if (sig_num == SIGINT) {
+#ifdef PRINT_TO_STDOUT
         write(1, "[Fabryka][SIGNAL] Received SIGINT signal!\n", 44);
+#endif
         exit(0);
     }
 
