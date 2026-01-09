@@ -6,12 +6,15 @@
 #include "common.h"
 
 typedef struct {
-    pid_t* children;
-    SHM_DATA* data;
+    pid_t *children;
+    SHM_DATA *data;
 } UI_data;
 
 void clean_up(int sem_id, int shm_id);
-void* handle_user_interface(void* ui_data);
-void* sig_handler(int sig_num);
+void *handle_user_interface(void *ui_data);
+void *sig_handler(int sig_num);
+
+int restore_state();
+int save_state();
 
 #endif

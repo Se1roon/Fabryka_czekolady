@@ -77,7 +77,7 @@ int main(void) {
     for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
         delivery_guys[d_guy].sem_id = sem_id;
         delivery_guys[d_guy].magazine_data = sh_data;
-        delivery_guys[d_guy].is_working = true;
+        delivery_guys[d_guy].is_working = INIT_WORK;
 
         if ((errno = pthread_create(&delivery_guys[d_guy].tid, NULL, delivery,
                                     (void *)&delivery_guys[d_guy])) != 0) {

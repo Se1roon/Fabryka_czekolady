@@ -23,6 +23,8 @@ union semun {
 static int sem_id;
 static int shm_id;
 
+static SHM_DATA *magazine = NULL;
+
 int main(void) {
     struct sigaction sig_action;
     sig_action.sa_handler = (void *)sig_handler;
@@ -30,9 +32,7 @@ int main(void) {
     sig_action.sa_flags = SA_RESTART;
 
     if (sigaction(SIGINT, &sig_action, NULL) != 0) {
-        fprintf(stderr,
-                "[Dyrektor][ERRN] Failed to initialize signal handling! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
         return -1;
     }
 
@@ -47,21 +47,16 @@ int main(void) {
     // Create Semaphore Set
     sem_id = semget(ipc_key, 2, IPC_CREAT | IPC_EXCL | 0600);
     if (sem_id == -1) {
-        fprintf(stderr,
-                "[Dyrektor][ERRN] Unable to create Semaphore Set! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dyrektor][ERRN] Unable to create Semaphore Set! (%s)\n", strerror(errno));
         return 2;
     }
 
-    // Initialize Semaphore Set to 1s (sem 0 -> magazine sync | sem 1 -> log
-    // file sync)
+    // Initialize Semaphore Set to 1s (sem 0 -> magazine sync | sem 1 -> logfile sync)
     unsigned short values[2] = {1, 1};
     union semun arg;
     arg.array = values;
     if (semctl(sem_id, 0, SETALL, arg) == -1) {
-        fprintf(stderr,
-                "[Dyrektor][ERRN] Unable to initialize Semaphore Set! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dyrektor][ERRN] Unable to initialize Semaphore Set! (%s)\n", strerror(errno));
         clean_up(sem_id, -1);
         return 3;
     }
@@ -69,41 +64,32 @@ int main(void) {
     // Create Shared Memory segment (initialized with 0s)
     shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | IPC_EXCL | 0600);
     if (shm_id == -1) {
-        fprintf(
-            stderr,
-            "[Dyrektor][ERRN] Unable to create Shared Memory segment! (%s)\n",
-            strerror(errno));
+        fprintf(stderr, "[Dyrektor][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
         clean_up(sem_id, -1);
         return 4;
     }
     // Initialize capacity in SHM to MAG_CAPACITY
-    SHM_DATA *shm = (SHM_DATA *)shmat(shm_id, 0, 0);
-    if (shm == (void *)-1) {
-        fprintf(stderr,
-                "[Dyrektor][ERRN] Failed to attach to Shared Memory segment! "
-                "(%s)\n",
-                strerror(errno));
+    magazine = (SHM_DATA *)shmat(shm_id, 0, 0);
+    if (magazine == (void *)-1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
         clean_up(sem_id, shm_id);
         return 5;
     }
-    *(size_t *)shm = (size_t)MAG_CAPACITY;
-    /*
-    if (shmdt(shm) == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to deattach from Shared memory
-    segment! (%s)\n", strerror(errno)); clean_up(sem_id, shm_id); return 6;
+    *(size_t *)magazine = (size_t)MAG_CAPACITY;
+
+    if (restore_state() < 0) {
+        clean_up(sem_id, shm_id);
+        return -1;
     }
-        */
 
     pid_t child_processes[2]; // Dostawcy, Fabryka
 
     UI_data ui_data;
     ui_data.children = child_processes;
-    ui_data.data = shm;
+    ui_data.data = magazine;
     pthread_t uint_tid; // User interface TID
-    if ((errno = pthread_create(&uint_tid, NULL, handle_user_interface,
-                                (void *)&ui_data)) != 0) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to create Thread! (%s)\n",
-                strerror(errno));
+    if ((errno = pthread_create(&uint_tid, NULL, handle_user_interface, (void *)&ui_data)) != 0) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to create Thread! (%s)\n", strerror(errno));
         return 9;
     }
 
@@ -112,22 +98,16 @@ int main(void) {
         pid_t cpid = fork();
         switch (cpid) {
         case -1: {
-            fprintf(
-                stderr,
-                "[Dyrektor][main][ERRN] Failed to create child process! (%s)\n",
-                strerror(errno));
+            fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process! (%s)\n", strerror(errno));
             clean_up(sem_id, shm_id);
             return 7;
         }
         case 0: {
-            const char *exec_prog =
-                (cproc == 0) ? "./bin/dostawcy" : "./bin/fabryka";
+            const char *exec_prog = (cproc == 0) ? "./bin/dostawcy" : "./bin/fabryka";
             execl(exec_prog, exec_prog, NULL);
 
             // execl returns = error
-            fprintf(stderr,
-                    "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n",
-                    exec_prog, strerror(errno));
+            fprintf(stderr, "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n", exec_prog, strerror(errno));
             clean_up(sem_id, shm_id);
             return 8;
         }
@@ -142,39 +122,31 @@ int main(void) {
 
         int status = -1;
         if (waitpid(child_pid, &status, 0) < 0) {
-            fprintf(
-                stderr,
-                "[Dyrektor][ERRN] Failed to wait for child termination! (%s)\n",
-                strerror(errno));
+            fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for child termination! (%s)\n", strerror(errno));
             clean_up(sem_id, shm_id);
         }
 
         if (WIFEXITED(status))
-            printf("[Dyrektor] Child process %d has terminated (code %d)\n",
-                   child_pid, WEXITSTATUS(status));
+            printf("[Dyrektor] Child process %d has terminated (code %d)\n", child_pid, WEXITSTATUS(status));
     }
 
     if ((errno = pthread_join(uint_tid, NULL)) != 0) {
-        fprintf(stderr,
-                "[Dyrektor][ERRN] Failed to wait for User Interface Thread to "
-                "finish! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for User Interface Thread to finish! (%s)\n", strerror(errno));
         return 12;
     }
 
+    save_state();
     clean_up(sem_id, shm_id);
     return 0;
 }
 
 void clean_up(int sem_id, int shm_id) {
     if (shm_id > 0 && shmctl(shm_id, IPC_RMID, NULL) == -1) {
-        fprintf(stderr, "Failed to clean up Shared Memory segment! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "Failed to clean up Shared Memory segment! (%s)\n", strerror(errno));
         exit(10);
     }
     if (sem_id > 0 && semctl(sem_id, 0, IPC_RMID) == -1) {
-        fprintf(stderr, "Failed to clean up Semaphore Set! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "Failed to clean up Semaphore Set! (%s)\n", strerror(errno));
         exit(11);
     }
 
@@ -184,8 +156,8 @@ void clean_up(int sem_id, int shm_id) {
 void *handle_user_interface(void *ui_data) {
     UI_data *u_data = (UI_data *)ui_data;
 
-    bool f_work = true;
-    bool d_work = true;
+    bool f_work = INIT_WORK;
+    bool d_work = INIT_WORK;
 
     char *command = NULL;
     size_t command_len = -1;
@@ -236,9 +208,7 @@ void *handle_user_interface(void *ui_data) {
                 f_work = !f_work;
                 printf("Fabryka switched to %s\n", f_work ? "ON" : "OFF");
             } else if (strncmp(command, "help", 4) == 0) {
-                printf("\nstats - Shows the state of factory and deliveries as "
-                       "well as the number of chocolate "
-                       "produced.\n");
+                printf("\nstats - Shows the state of factory and deliveries as well as the number of chocolate produced.\n");
                 printf("td    - Toggles the deliveries\n");
                 printf("tf    - Toggles the factory\n");
                 printf("quit  - Quits\n\n");
@@ -253,9 +223,57 @@ void *handle_user_interface(void *ui_data) {
 void *sig_handler(int sig_num) {
     if (sig_num == SIGINT) {
         write(1, "[Dyrektor][SIGNAL] Received SIGINT!\n", 38);
+        save_state();
         clean_up(sem_id, shm_id);
         exit(0);
     }
 
     return NULL;
+}
+
+int restore_state() {
+    FILE *in_file = fopen(SAVE_FILE, "r");
+    if (!in_file) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to open magazine file! (%s)\n", strerror(errno));
+        return -1;
+    }
+
+    if (fread(magazine, sizeof(SHM_DATA), 1, in_file) != 1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to restore magazine state! (%s)\n", strerror(errno));
+        return -1;
+    }
+
+    fclose(in_file);
+    return 0;
+}
+
+int save_state() {
+    struct sembuf sem_op;
+    sem_op.sem_num = 0;
+    sem_op.sem_flg = 0;
+    sem_op.sem_op = -1;
+
+    if (semop(sem_id, &sem_op, 1) == -1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+        return -1;
+    }
+
+    FILE *out_file = fopen(SAVE_FILE, "w");
+    if (!out_file) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to save magazine to a file! (%s)\n", strerror(errno));
+        return -1;
+    }
+    if (fwrite(magazine, sizeof(SHM_DATA), 1, out_file) != 1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to write magazine to a file! (%s)\n", strerror(errno));
+        return -1;
+    }
+
+    sem_op.sem_op = 1;
+    if (semop(sem_id, &sem_op, 1) == -1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+        return -1;
+    }
+
+    fclose(out_file);
+    return 0;
 }

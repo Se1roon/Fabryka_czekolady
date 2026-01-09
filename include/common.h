@@ -1,12 +1,15 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 // #define PRINT_TO_STDOUT
 
 // Capacity of magazine
 #define MAG_CAPACITY 10000
+#define SAVE_FILE    "./.magazyn"
+#define INIT_WORK    false
 
 typedef enum {
     A,
