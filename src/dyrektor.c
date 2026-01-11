@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ipc.h>
+#include <sys/msg.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
 #include <sys/wait.h>
@@ -14,16 +15,19 @@
 #include "../include/common.h"
 #include "../include/dyrektor.h"
 
+static void *sig_handler(int sig_num);
+
 union semun {
     int value;
     struct semid_ds *buf;
     unsigned short *array;
 };
 
-static int sem_id;
-static int shm_id;
-
+static int sem_id = -1;
+static int shm_id = -1;
+static int msg_id = -1;
 static SHM_DATA *magazine = NULL;
+
 
 int main(void) {
     struct sigaction sig_action;
@@ -39,25 +43,23 @@ int main(void) {
     // Obtain IPC key
     key_t ipc_key = ftok(".", 69);
     if (ipc_key == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Unable to create IPC Key! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dyrektor][ERRN] Unable to create IPC Key! (%s)\n", strerror(errno));
         return 1;
     }
 
     // Create Semaphore Set
-    sem_id = semget(ipc_key, 2, IPC_CREAT | IPC_EXCL | 0600);
+    sem_id = semget(ipc_key, 1, IPC_CREAT | IPC_EXCL | 0600);
     if (sem_id == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to create Semaphore Set! (%s)\n", strerror(errno));
         return 2;
     }
 
-    // Initialize Semaphore Set to 1s (sem 0 -> magazine sync | sem 1 -> logfile sync)
-    unsigned short values[2] = {1, 1};
+    // Initialize Semaphore Set to 1
     union semun arg;
-    arg.array = values;
-    if (semctl(sem_id, 0, SETALL, arg) == -1) {
+    arg.value = 1;
+    if (semctl(sem_id, 0, SETVAL, arg) == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to initialize Semaphore Set! (%s)\n", strerror(errno));
-        clean_up(sem_id, -1);
+        clean_up(sem_id, -1, -1);
         return 3;
     }
 
@@ -65,24 +67,32 @@ int main(void) {
     shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | IPC_EXCL | 0600);
     if (shm_id == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
-        clean_up(sem_id, -1);
+        clean_up(sem_id, -1, -1);
         return 4;
     }
     // Initialize capacity in SHM to MAG_CAPACITY
     magazine = (SHM_DATA *)shmat(shm_id, 0, 0);
     if (magazine == (void *)-1) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
-        clean_up(sem_id, shm_id);
+        clean_up(sem_id, shm_id, -1);
         return 5;
     }
     *(size_t *)magazine = (size_t)MAG_CAPACITY;
 
-    if (restore_state() < 0) {
-        clean_up(sem_id, shm_id);
+    // Create Message Queue for Logging
+    msg_id = msgget(ipc_key, IPC_CREAT | IPC_EXCL | 0600);
+    if (msg_id == -1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Unable to create Message Queue! (%s)\n", strerror(errno));
+        clean_up(sem_id, shm_id, -1);
         return -1;
     }
 
-    pid_t child_processes[2]; // Dostawcy, Fabryka
+    if (restore_state() < 0) {
+        clean_up(sem_id, shm_id, msg_id);
+        return -1;
+    }
+
+    pid_t child_processes[3]; // Dostawcy, Fabryka, Logging
 
     UI_data ui_data;
     ui_data.children = child_processes;
@@ -94,21 +104,22 @@ int main(void) {
     }
 
     // Start child processes
-    for (int cproc = 0; cproc < 2; cproc++) {
+    for (int cproc = 0; cproc < 3; cproc++) {
         pid_t cpid = fork();
         switch (cpid) {
         case -1: {
             fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process! (%s)\n", strerror(errno));
-            clean_up(sem_id, shm_id);
+            clean_up(sem_id, shm_id, msg_id);
             return 7;
         }
         case 0: {
-            const char *exec_prog = (cproc == 0) ? "./bin/dostawcy" : "./bin/fabryka";
+            const char *exec_prog = (cproc == 0) ? "./bin/logging" : (cproc == 1) ? "./bin/dostawcy"
+                                                                                  : "./bin/fabryka";
             execl(exec_prog, exec_prog, NULL);
 
             // execl returns = error
             fprintf(stderr, "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n", exec_prog, strerror(errno));
-            clean_up(sem_id, shm_id);
+            clean_up(sem_id, shm_id, msg_id);
             return 8;
         }
         default:
@@ -117,13 +128,13 @@ int main(void) {
     }
 
     // Wait for child processes to finish
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         pid_t child_pid = child_processes[i];
 
         int status = -1;
         if (waitpid(child_pid, &status, 0) < 0) {
             fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for child termination! (%s)\n", strerror(errno));
-            clean_up(sem_id, shm_id);
+            clean_up(sem_id, shm_id, msg_id);
         }
 
         if (WIFEXITED(status))
@@ -136,11 +147,11 @@ int main(void) {
     }
 
     save_state();
-    clean_up(sem_id, shm_id);
+    clean_up(sem_id, shm_id, msg_id);
     return 0;
 }
 
-void clean_up(int sem_id, int shm_id) {
+void clean_up(int sem_id, int shm_id, int msg_id) {
     if (shm_id > 0 && shmctl(shm_id, IPC_RMID, NULL) == -1) {
         fprintf(stderr, "Failed to clean up Shared Memory segment! (%s)\n", strerror(errno));
         exit(10);
@@ -148,6 +159,10 @@ void clean_up(int sem_id, int shm_id) {
     if (sem_id > 0 && semctl(sem_id, 0, IPC_RMID) == -1) {
         fprintf(stderr, "Failed to clean up Semaphore Set! (%s)\n", strerror(errno));
         exit(11);
+    }
+    if (msg_id > 0 && msgctl(msg_id, IPC_RMID, NULL) == -1) {
+        fprintf(stderr, "Failed to clean up Message Queue! (%s)\n", strerror(errno));
+        exit(12);
     }
 
     return;
@@ -171,8 +186,9 @@ void *handle_user_interface(void *ui_data) {
             command[command_len-- - 1] = 0; // Remove the trailing newline
 
             if (strncmp(command, "quit", 4) == 0) {
-                kill(u_data->children[0], SIGINT);
                 kill(u_data->children[1], SIGINT);
+                kill(u_data->children[2], SIGINT);
+                kill(u_data->children[0], SIGINT);
                 break;
             } else if (strncmp(command, "stats", 5) == 0) {
                 struct sembuf sem_op;
@@ -199,12 +215,12 @@ void *handle_user_interface(void *ui_data) {
                 semop(sem_id, &sem_op, 1);
             } else if (strncmp(command, "td", 2) == 0) {
                 // Sent SIGUSR1 to Dostawcy
-                kill(u_data->children[0], SIGUSR1);
+                kill(u_data->children[1], SIGUSR1);
                 d_work = !d_work;
                 printf("Dostawcy switched to %s\n", d_work ? "ON" : "OFF");
             } else if (strncmp(command, "tf", 2) == 0) {
                 // Sent SIGUSR1 to Fabryka
-                kill(u_data->children[1], SIGUSR1);
+                kill(u_data->children[2], SIGUSR1);
                 f_work = !f_work;
                 printf("Fabryka switched to %s\n", f_work ? "ON" : "OFF");
             } else if (strncmp(command, "help", 4) == 0) {
@@ -220,22 +236,13 @@ void *handle_user_interface(void *ui_data) {
     return NULL;
 }
 
-void *sig_handler(int sig_num) {
-    if (sig_num == SIGINT) {
-        write(1, "[Dyrektor][SIGNAL] Received SIGINT!\n", 38);
-        save_state();
-        clean_up(sem_id, shm_id);
-        exit(0);
-    }
-
-    return NULL;
-}
 
 int restore_state() {
     FILE *in_file = fopen(SAVE_FILE, "r");
     if (!in_file) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to open magazine file! (%s)\n", strerror(errno));
-        return -1;
+        fprintf(stderr, "[Dyrektor][WARN] Failed to open magazine file! (%s)\n", strerror(errno));
+        fprintf(stderr, "[Dyrektor][INFO] Continuing without restoring magazine state!\n");
+        return 0;
     }
 
     if (fread(magazine, sizeof(SHM_DATA), 1, in_file) != 1) {
@@ -276,4 +283,15 @@ int save_state() {
 
     fclose(out_file);
     return 0;
+}
+
+void *sig_handler(int sig_num) {
+    if (sig_num == SIGINT) {
+        write(1, "[Dyrektor][SIGNAL] Received SIGINT!\n", 38);
+        save_state();
+        clean_up(sem_id, shm_id, msg_id);
+        exit(0);
+    }
+
+    return NULL;
 }

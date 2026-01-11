@@ -10,9 +10,8 @@ typedef struct {
     SHM_DATA *data;
 } UI_data;
 
-void clean_up(int sem_id, int shm_id);
+void clean_up(int sem_id, int shm_id, int msg_id);
 void *handle_user_interface(void *ui_data);
-void *sig_handler(int sig_num);
 
 int restore_state();
 int save_state();

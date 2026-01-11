@@ -19,6 +19,4 @@ typedef struct {
 void *delivery(void *delivery_data);
 size_t get_magazine_count(SHM_DATA *magazine);
 
-static void *sig_handler(int sig_num);
-
 #endif

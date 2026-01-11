@@ -12,7 +12,10 @@
 #include "../include/common.h"
 #include "../include/dostawcy.h"
 
+static void *sig_handler(int sig_num);
+
 static delivery_t delivery_guys[DELIVERY_GUYS_COUNT];
+
 
 int main(void) {
     struct sigaction sig_action;
@@ -21,51 +24,39 @@ int main(void) {
     sig_action.sa_flags = SA_RESTART;
 
     if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {
-        fprintf(stderr,
-                "[Dostawcy][ERRN] Failed to initialize signal handling! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
         return -1;
     }
     if (sigaction(SIGINT, &sig_action, NULL) != 0) {
-        fprintf(stderr,
-                "[Dostawcy][ERRN] Failed to initialize signal handling! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
         return -1;
     }
 
     // Obtain IPC key
     key_t ipc_key = ftok(".", 69);
     if (ipc_key == -1) {
-        fprintf(stderr, "[Dostawcy][ERRN] Unable to create IPC Key! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dostawcy][ERRN] Unable to create IPC Key! (%s)\n", strerror(errno));
         return 1;
     }
 
     // Join the Semaphore Set
-    int sem_id = semget(ipc_key, 2, IPC_CREAT | 0600);
+    int sem_id = semget(ipc_key, 1, IPC_CREAT | 0600);
     if (sem_id == -1) {
-        fprintf(stderr, "[Dostawcy][ERRN] Unable to join Semaphore Set! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dostawcy][ERRN] Unable to join Semaphore Set! (%s)\n", strerror(errno));
         return 2;
     }
 
     // Join the Shared Memory segment
     int shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | 0600);
     if (shm_id == -1) {
-        fprintf(
-            stderr,
-            "[Dostawcy][ERRN] Unable to create Shared Memory segment! (%s)\n",
-            strerror(errno));
+        fprintf(stderr, "[Dostawcy][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
         return 3;
     }
 
     // Attach to Shared Memory
     SHM_DATA *sh_data = (SHM_DATA *)shmat(shm_id, 0, 0);
     if (sh_data == (void *)-1) {
-        fprintf(stderr,
-                "[Dostawcy][ERRN] Failed to attach to Shared Memory segment! "
-                "(%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
         return 4;
     }
 
@@ -79,10 +70,8 @@ int main(void) {
         delivery_guys[d_guy].magazine_data = sh_data;
         delivery_guys[d_guy].is_working = INIT_WORK;
 
-        if ((errno = pthread_create(&delivery_guys[d_guy].tid, NULL, delivery,
-                                    (void *)&delivery_guys[d_guy])) != 0) {
-            fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n",
-                    strerror(errno));
+        if ((errno = pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void *)&delivery_guys[d_guy])) != 0) {
+            fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n", strerror(errno));
             return 5;
         }
     }
@@ -90,20 +79,14 @@ int main(void) {
     for (int i = 0; i < DELIVERY_GUYS_COUNT; i++) {
         int *rval = NULL;
         if ((errno = pthread_join(delivery_guys[i].tid, (void *)&rval)) != 0) {
-            fprintf(stderr,
-                    "[Dostawcy][ERRN] Failed to wait for thread "
-                    "termination! (%s)\n",
-                    strerror(errno));
+            fprintf(stderr, "[Dostawcy][ERRN] Failed to wait for thread termination! (%s)\n", strerror(errno));
             return 6;
         }
     }
 
     // Detach from SHM
     if (shmdt(sh_data) == -1) {
-        fprintf(stderr,
-                "[Dostawcy][ERRN] Failed to deattach from Shared Memory "
-                "segment! (%s)\n",
-                strerror(errno));
+        fprintf(stderr, "[Dostawcy][ERRN] Failed to deattach from Shared Memory segment! (%s)\n", strerror(errno));
         return 7;
     }
 
@@ -124,11 +107,7 @@ void *delivery(void *delivery_data) {
             sem_op.sem_op = -1;
 
             if (semop(sem_id, &sem_op, 1) == -1) {
-                fprintf(
-                    stderr,
-                    "[Dostawcy][ERRN] Failed to perform semaphore operation! "
-                    "(%s)\n",
-                    strerror(errno));
+                fprintf(stderr, "[Dostawcy][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
                 return (void *)1;
             }
 
@@ -158,11 +137,7 @@ void *delivery(void *delivery_data) {
 
             sem_op.sem_op = 1;
             if (semop(sem_id, &sem_op, 1) == -1) {
-                fprintf(
-                    stderr,
-                    "[Dostawcy][ERRN] Failed to perform semaphore operation! "
-                    "(%s)\n",
-                    strerror(errno));
+                fprintf(stderr, "[Dostawcy][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
                 return (void *)1;
             }
         }
@@ -180,15 +155,9 @@ size_t get_magazine_count(SHM_DATA *magazine) {
 
 void *sig_handler(int sig_num) {
     if (sig_num == SIGUSR1) {
-#ifdef PRINT_TO_STDOUT
-        write(1, "[Dostawcy][SIGNAL] Received toggle_delivery signal!\n", 54);
-#endif
         for (int i = 0; i < DELIVERY_GUYS_COUNT; i++)
             delivery_guys[i].is_working = !delivery_guys[i].is_working;
     } else if (sig_num == SIGINT) {
-#ifdef PRINT_TO_STDOUT
-        write(1, "[Dostawcy][SIGNAL] Received SIGINT signal!\n", 45);
-#endif
         exit(0);
     }
 

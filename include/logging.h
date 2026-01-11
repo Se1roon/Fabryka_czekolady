@@ -1,9 +1,15 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
-#define LOG_FILE "./.fc.log"
+#include <stdio.h>
 
-int init_log();
-int write_log(int fd, const char *format, ...);
+#define LOG_FILE            "./.fc.log"
+#define PRODUCTION_LOG_RATE 200
+#define LOG_MESSAGE_MAX_LEN 256
+
+typedef struct {
+    long mtype;
+    char message[LOG_MESSAGE_MAX_LEN];
+} LogMessage;
 
 #endif
