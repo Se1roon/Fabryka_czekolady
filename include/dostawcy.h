@@ -13,6 +13,7 @@ typedef struct {
     component_type type;
     bool is_working;
     int sem_id;
+    int msg_id;
     SHM_DATA *magazine_data;
 } delivery_t;
 

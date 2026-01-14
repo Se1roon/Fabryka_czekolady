@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ipc.h>
+#include <sys/msg.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
 #include <unistd.h>
@@ -39,18 +40,25 @@ int main(void) {
         return 1;
     }
 
+    // Join the Message Queue for logging
+    int msg_id = msgget(ipc_key, IPC_CREAT | 0600);
+    if (msg_id == -1) {
+        fprintf(stderr, "[Logging][ERRN] Unable to join the Message Queue! (%s)\n", strerror(errno));
+        return 2;
+    }
+
     // Join the Semaphore Set
     int sem_id = semget(ipc_key, 1, IPC_CREAT | 0600);
     if (sem_id == -1) {
         fprintf(stderr, "[Dostawcy][ERRN] Unable to join Semaphore Set! (%s)\n", strerror(errno));
-        return 2;
+        return 3;
     }
 
     // Join the Shared Memory segment
     int shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | 0600);
     if (shm_id == -1) {
         fprintf(stderr, "[Dostawcy][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
-        return 3;
+        return 4;
     }
 
     // Attach to Shared Memory
@@ -67,6 +75,7 @@ int main(void) {
 
     for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
         delivery_guys[d_guy].sem_id = sem_id;
+        delivery_guys[d_guy].msg_id = msg_id;
         delivery_guys[d_guy].magazine_data = sh_data;
         delivery_guys[d_guy].is_working = INIT_WORK;
 

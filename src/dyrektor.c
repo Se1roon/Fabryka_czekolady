@@ -15,6 +15,13 @@
 #include "../include/common.h"
 #include "../include/dyrektor.h"
 
+// TODO: Add log colorization
+// TODO: Add log writes in dostawcy
+// TODO: Handle deattaching from Shared Memory if that's necessary
+// TODO: Update README, create documentation
+// TODO: Add tests
+// TODO: (?) Delete usleeps
+
 static void *sig_handler(int sig_num);
 
 union semun {
@@ -47,11 +54,19 @@ int main(void) {
         return 1;
     }
 
+    // Create Message Queue for Logging
+    msg_id = msgget(ipc_key, IPC_CREAT | IPC_EXCL | 0600);
+    if (msg_id == -1) {
+        fprintf(stderr, "[Dyrektor][ERRN] Unable to create Message Queue! (%s)\n", strerror(errno));
+        return 2;
+    }
+
     // Create Semaphore Set
     sem_id = semget(ipc_key, 1, IPC_CREAT | IPC_EXCL | 0600);
     if (sem_id == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to create Semaphore Set! (%s)\n", strerror(errno));
-        return 2;
+        clean_up(-1, -1, msg_id);
+        return 3;
     }
 
     // Initialize Semaphore Set to 1
@@ -59,7 +74,7 @@ int main(void) {
     arg.value = 1;
     if (semctl(sem_id, 0, SETVAL, arg) == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to initialize Semaphore Set! (%s)\n", strerror(errno));
-        clean_up(sem_id, -1, -1);
+        clean_up(sem_id, -1, msg_id);
         return 3;
     }
 
@@ -67,29 +82,21 @@ int main(void) {
     shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | IPC_EXCL | 0600);
     if (shm_id == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
-        clean_up(sem_id, -1, -1);
+        clean_up(sem_id, -1, msg_id);
         return 4;
     }
     // Initialize capacity in SHM to MAG_CAPACITY
     magazine = (SHM_DATA *)shmat(shm_id, 0, 0);
     if (magazine == (void *)-1) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
-        clean_up(sem_id, shm_id, -1);
-        return 5;
+        clean_up(sem_id, shm_id, msg_id);
+        return 4;
     }
     *(size_t *)magazine = (size_t)MAG_CAPACITY;
 
-    // Create Message Queue for Logging
-    msg_id = msgget(ipc_key, IPC_CREAT | IPC_EXCL | 0600);
-    if (msg_id == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Unable to create Message Queue! (%s)\n", strerror(errno));
-        clean_up(sem_id, shm_id, -1);
-        return -1;
-    }
-
     if (restore_state() < 0) {
         clean_up(sem_id, shm_id, msg_id);
-        return -1;
+        return 5;
     }
 
     pid_t child_processes[3]; // Dostawcy, Fabryka, Logging
@@ -100,7 +107,7 @@ int main(void) {
     pthread_t uint_tid; // User interface TID
     if ((errno = pthread_create(&uint_tid, NULL, handle_user_interface, (void *)&ui_data)) != 0) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to create Thread! (%s)\n", strerror(errno));
-        return 9;
+        return 6;
     }
 
     // Start child processes
@@ -120,7 +127,7 @@ int main(void) {
             // execl returns = error
             fprintf(stderr, "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n", exec_prog, strerror(errno));
             clean_up(sem_id, shm_id, msg_id);
-            return 8;
+            return 7;
         }
         default:
             child_processes[cproc] = cpid;
@@ -143,7 +150,7 @@ int main(void) {
 
     if ((errno = pthread_join(uint_tid, NULL)) != 0) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for User Interface Thread to finish! (%s)\n", strerror(errno));
-        return 12;
+        return 8;
     }
 
     save_state();

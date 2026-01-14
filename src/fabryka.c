@@ -31,8 +31,12 @@ int main(void) {
     sig_action.sa_flags = SA_RESTART;
 
     if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {
+        fprintf(stderr, "[Fabryka][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
+        return -1;
     }
     if (sigaction(SIGINT, &sig_action, NULL) != 0) {
+        fprintf(stderr, "[Fabryka][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
+        return -1;
     }
 
     // Obtain IPC key
@@ -42,31 +46,34 @@ int main(void) {
         return 1;
     }
 
+    // Join the Message Queue for logging
+    msg_id = msgget(ipc_key, IPC_CREAT | 0600);
+    if (msg_id == -1) {
+        fprintf(stderr, "[Logging][ERRN] Unable to join the Message Queue! (%s)\n", strerror(errno));
+        return 2;
+    }
+
     // Join the Semaphore Set
     int sem_id = semget(ipc_key, 1, IPC_CREAT | 0600);
     if (sem_id == -1) {
         fprintf(stderr, "[Fabryka][ERRN] Unable to join Semaphore Set! (%s)\n", strerror(errno));
-        return 2;
-    }
-
-    // Join the Message Queue
-    msg_id = msgget(ipc_key, IPC_CREAT | 0600);
-    if (msg_id == -1) {
-        fprintf(stderr, "[Logging][ERRN] Unable to join the Message Queue! (%s)\n", strerror(errno));
-        return -1;
+        write_log(msg_id, "[Fabryka][ERRN] Unable to join Semaphore Set!");
+        return 3;
     }
 
     // Join the Shared Memory segment
     int shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | 0600);
     if (shm_id == -1) {
         fprintf(stderr, "[Fabryka][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
-        return 3;
+        write_log(msg_id, "[Fabryka][ERRN] Unable to create Shared Memory segment!");
+        return 4;
     }
 
     // Attach to Shared Memory
     magazine = (SHM_DATA *)shmat(shm_id, 0, 0);
     if (magazine == (void *)-1) {
         fprintf(stderr, "[Fabryka][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
+        write_log(msg_id, "[Fabryka][ERRN] Failed to attach to Shared Memory segment!");
         return 4;
     }
 
@@ -80,14 +87,15 @@ int main(void) {
 
     if ((errno = pthread_create(&s1_pid, NULL, station_1, (void *)&station_data)) != 0) {
         fprintf(stderr, "[Fabryka][ERRN] Failed to create Station 1! (%s)\n", strerror(errno));
+        write_log(msg_id, "[Fabryka][ERRN] Failed to create Station 1!");
         return 5;
     }
     if ((errno = pthread_create(&s2_pid, NULL, station_2, (void *)&station_data)) != 0) {
         fprintf(stderr, "[Fabryka][ERRN] Failed to create Station 2! (%s)\n", strerror(errno));
+        write_log(msg_id, "[Fabryka][ERRN] Failed to create Station 2!");
         return 5;
     }
 
-    // Pointless??
     if ((errno = pthread_join(s1_pid, NULL)) != 0) {
         fprintf(stderr, "[Fabryka][ERRN] Failed to wait for Station 1 to finish! (%s)\n", strerror(errno));
         return 6;
@@ -117,6 +125,7 @@ void *station_1(void *station_data) {
             sem_op.sem_op = -1;
             if (semop(sem_id, &sem_op, 1) == -1) {
                 fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+                write_log(msg_id, "[Fabryka][ERRN] Failed to perform semaphore operation!");
                 return (void *)1;
             }
 
@@ -138,6 +147,7 @@ void *station_1(void *station_data) {
             sem_op.sem_op = 1;
             if (semop(sem_id, &sem_op, 1) == -1) {
                 fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+                write_log(msg_id, "[Fabryka][ERRN] Failed to perform semaphore operation!");
                 return (void *)1;
             }
         }
@@ -164,6 +174,7 @@ void *station_2(void *station_data) {
             sem_op.sem_op = -1;
             if (semop(sem_id, &sem_op, 1) == -1) {
                 fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+                write_log(msg_id, "[Fabryka][ERRN] Failed to perform semaphore operation!");
                 return (void *)1;
             }
 
@@ -185,6 +196,7 @@ void *station_2(void *station_data) {
             sem_op.sem_op = 1;
             if (semop(sem_id, &sem_op, 1) == -1) {
                 fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
+                write_log(msg_id, "[Fabryka][ERRN] Failed to perform semaphore operation!");
                 return (void *)1;
             }
         }
