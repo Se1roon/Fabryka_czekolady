@@ -4,20 +4,19 @@
 #include <pthread.h>
 #include <stdbool.h>
 
-#include "common.h"
+#include "magazine.h"
 
-#define DELIVERY_GUYS_COUNT 4
+#define DELIVERIES_COUNT 4
 
 typedef struct {
     pthread_t tid;
-    component_type type;
+    E_Component type;
     bool is_working;
     int sem_id;
     int msg_id;
-    SHM_DATA *magazine_data;
-} delivery_t;
+    Magazine *magazine;
+} Delivery;
 
-void *delivery(void *delivery_data);
-size_t get_magazine_count(SHM_DATA *magazine);
+void *delivery_start(void *delivery_data);
 
 #endif

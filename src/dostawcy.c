@@ -10,12 +10,12 @@
 #include <sys/shm.h>
 #include <unistd.h>
 
-#include "../include/common.h"
 #include "../include/dostawcy.h"
+#include "../include/magazine.h"
 
 static void *sig_handler(int sig_num);
 
-static delivery_t delivery_guys[DELIVERY_GUYS_COUNT];
+static Delivery deliveries[DELIVERIES_COUNT];
 
 
 int main(void) {
@@ -55,46 +55,46 @@ int main(void) {
     }
 
     // Join the Shared Memory segment
-    int shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | 0600);
+    int shm_id = shmget(ipc_key, sizeof(Magazine), IPC_CREAT | 0600);
     if (shm_id == -1) {
         fprintf(stderr, "[Dostawcy][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
         return 4;
     }
 
     // Attach to Shared Memory
-    SHM_DATA *sh_data = (SHM_DATA *)shmat(shm_id, 0, 0);
-    if (sh_data == (void *)-1) {
+    Magazine *magazine = (Magazine *)shmat(shm_id, 0, 0);
+    if (magazine == (void *)-1) {
         fprintf(stderr, "[Dostawcy][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
         return 4;
     }
 
-    delivery_guys[0].type = A;
-    delivery_guys[1].type = B;
-    delivery_guys[2].type = C;
-    delivery_guys[3].type = D;
+    // Fill information about delivieries
+    deliveries[0].type = A;
+    deliveries[1].type = B;
+    deliveries[2].type = C;
+    deliveries[3].type = D;
+    for (int deliv = 0; deliv < DELIVERIES_COUNT; deliv++) {
+        deliveries[deliv].magazine = magazine;
+        deliveries[deliv].sem_id = sem_id;
+        deliveries[deliv].msg_id = msg_id;
+        deliveries[deliv].is_working = INIT_WORK;
 
-    for (int d_guy = 0; d_guy < DELIVERY_GUYS_COUNT; d_guy++) {
-        delivery_guys[d_guy].sem_id = sem_id;
-        delivery_guys[d_guy].msg_id = msg_id;
-        delivery_guys[d_guy].magazine_data = sh_data;
-        delivery_guys[d_guy].is_working = INIT_WORK;
-
-        if ((errno = pthread_create(&delivery_guys[d_guy].tid, NULL, delivery, (void *)&delivery_guys[d_guy])) != 0) {
+        // Start a delivery
+        if ((errno = pthread_create(&deliveries[deliv].tid, NULL, delivery_start, (void *)&deliveries[deliv])) != 0) {
             fprintf(stderr, "[Dostawcy][ERRN] Cannot start delivery! (%s)\n", strerror(errno));
             return 5;
         }
     }
 
-    for (int i = 0; i < DELIVERY_GUYS_COUNT; i++) {
-        int *rval = NULL;
-        if ((errno = pthread_join(delivery_guys[i].tid, (void *)&rval)) != 0) {
+    for (int i = 0; i < DELIVERIES_COUNT; i++) {
+        if ((errno = pthread_join(deliveries[i].tid, NULL) != 0)) {
             fprintf(stderr, "[Dostawcy][ERRN] Failed to wait for thread termination! (%s)\n", strerror(errno));
             return 6;
         }
     }
 
     // Detach from SHM
-    if (shmdt(sh_data) == -1) {
+    if (shmdt(magazine) == -1) {
         fprintf(stderr, "[Dostawcy][ERRN] Failed to deattach from Shared Memory segment! (%s)\n", strerror(errno));
         return 7;
     }
@@ -102,14 +102,17 @@ int main(void) {
     return 0;
 }
 
-void *delivery(void *delivery_data) {
-    delivery_t *d_data = (delivery_t *)delivery_data;
+void *delivery_start(void *delivery_data) {
+    Delivery *data = (Delivery *)delivery_data;
 
-    int sem_id = d_data->sem_id;
-    SHM_DATA *mag_data = d_data->magazine_data;
+    int sem_id = data->sem_id;
+    Magazine *magazine = data->magazine;
 
     while (true) {
-        if (d_data->is_working) {
+        if (magazine->space_left <= 0)
+            return (void *)0;
+
+        if (data->is_working) {
             struct sembuf sem_op;
             sem_op.sem_num = 0;
             sem_op.sem_flg = 0;
@@ -120,28 +123,75 @@ void *delivery(void *delivery_data) {
                 return (void *)1;
             }
 
-            size_t magazine_count = get_magazine_count(mag_data);
-            if (MAG_CAPACITY - magazine_count >= 10) {
-                switch (d_data->type) {
-                case A: {
-                    mag_data->a_count = mag_data->a_count + 2;
-                    break;
+            switch (data->type) {
+            case A: {
+                if (magazine->space_left >= 1) {
+                    int row = -1;
+                    int col = -1;
+                    find_free_slots(magazine, 1, &row, &col);
+
+                    if (row >= 0 && col >= 0) {
+                        magazine->magazine_racks[INDEX_2D(row, col, magazine)] = 'A';
+                        magazine->space_left--;
+                    } else
+                        fprintf(stderr, "Something wrong with find_free_slots :(!\n");
                 }
-                case B: {
-                    mag_data->b_count = mag_data->b_count + 2;
-                    break;
+            }
+            case B: {
+                if (magazine->space_left >= 1) {
+                    int row = -1;
+                    int col = -1;
+                    find_free_slots(magazine, 1, &row, &col);
+
+                    if (row >= 0 && col >= 0) {
+                        magazine->magazine_racks[INDEX_2D(row, col, magazine)] = 'B';
+                        magazine->space_left--;
+                    } else
+                        fprintf(stderr, "Something wrong with find_free_slots :(!\n");
                 }
-                case C: {
-                    if (mag_data->c_count < MAG_CAPACITY / 8)
-                        mag_data->c_count++;
-                    break;
+            }
+            case C: {
+                if (magazine->space_left >= 2) {
+                    int row = -1;
+                    int col = -1;
+                    find_free_slots(magazine, 2, &row, &col);
+
+                    if (row >= 0 && col >= 0) {
+                        int offset = 0;
+                        for (int inserted = 0; inserted < 2; inserted++) {
+                            if (col + offset >= magazine->columns) {
+                                row++;
+                                col = 0;
+                                offset = 0;
+                            }
+                            magazine->magazine_racks[INDEX_2D(row, col + offset++, magazine)] = 'C';
+                        }
+
+                        magazine->space_left = magazine->space_left - 2;
+                    }
                 }
-                case D: {
-                    if (mag_data->d_count < MAG_CAPACITY / 10)
-                        mag_data->d_count++;
-                    break;
+            }
+            case D: {
+                if (magazine->space_left >= 3) {
+                    int row = -1;
+                    int col = -1;
+                    find_free_slots(magazine, 3, &row, &col);
+
+                    if (row >= 0 && col >= 0) {
+                        int offset = 0;
+                        for (int inserted = 0; inserted < 3; inserted++) {
+                            if (col + offset >= magazine->columns) {
+                                row++;
+                                col = 0;
+                                offset = 0;
+                            }
+                            magazine->magazine_racks[INDEX_2D(row, col + offset++, magazine)] = 'D';
+                        }
+
+                        magazine->space_left = magazine->space_left - 3;
+                    }
                 }
-                }
+            }
             }
 
             sem_op.sem_op = 1;
@@ -157,18 +207,13 @@ void *delivery(void *delivery_data) {
     return (void *)0;
 }
 
-size_t get_magazine_count(SHM_DATA *magazine) {
-    return magazine->a_count + magazine->b_count + 2 * magazine->c_count +
-           3 * magazine->d_count;
-}
 
 void *sig_handler(int sig_num) {
-    if (sig_num == SIGUSR1) {
-        for (int i = 0; i < DELIVERY_GUYS_COUNT; i++)
-            delivery_guys[i].is_working = !delivery_guys[i].is_working;
-    } else if (sig_num == SIGINT) {
+    if (sig_num == SIGUSR1)
+        for (int i = 0; i < DELIVERIES_COUNT; i++)
+            deliveries[i].is_working = !deliveries[i].is_working;
+    else if (sig_num == SIGINT)
         exit(0);
-    }
 
     return NULL;
 }

@@ -12,8 +12,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "../include/common.h"
 #include "../include/dyrektor.h"
+#include "../include/magazine.h"
+
+// TODO: MAGAZYN MA BYC RING XDDDDDDD A NIE LICZBY
+// Magazyn to tablico o N bajtach pojemnosci (A, 2 = 1 bajt, C = 2 bajty, D = 3 bajty)
+//
 
 // TODO: Add log colorization
 // TODO: Add log writes in dostawcy
@@ -33,7 +37,7 @@ union semun {
 static int sem_id = -1;
 static int shm_id = -1;
 static int msg_id = -1;
-static SHM_DATA *magazine = NULL;
+static Magazine *magazine = NULL;
 
 
 int main(void) {
@@ -78,22 +82,82 @@ int main(void) {
         return 3;
     }
 
+    int magazine_cols = -1;
+    int magazine_rows = -1;
+    calculate_cols_rows(&magazine_cols, &magazine_rows);
+    printf("ROWS = %d, COLS = %d\n\n", magazine_rows, magazine_cols);
+    // LOG: Write the results to log
+
     // Create Shared Memory segment (initialized with 0s)
-    shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | IPC_EXCL | 0600);
+    shm_id = shmget(ipc_key, sizeof(Magazine), IPC_CREAT | IPC_EXCL | 0600);
     if (shm_id == -1) {
         fprintf(stderr, "[Dyrektor][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
         clean_up(sem_id, -1, msg_id);
         return 4;
     }
-    // Initialize capacity in SHM to MAG_CAPACITY
-    magazine = (SHM_DATA *)shmat(shm_id, 0, 0);
-    if (magazine == (void *)-1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
-        clean_up(sem_id, shm_id, msg_id);
-        return 4;
-    }
-    *(size_t *)magazine = (size_t)MAG_CAPACITY;
+    magazine = (Magazine *)shmat(shm_id, 0, 0);
+    magazine->columns = magazine_cols;
+    magazine->rows = magazine_rows;
+    magazine->space_left = MAGAZINE_CAPACITY;
+    // Detach?
 
+    pid_t child_processes[1]; // Dostawcy, Fabryka, Logging
+
+    // Start child processes
+    for (int cproc = 0; cproc < 1; cproc++) {
+        pid_t cpid = fork();
+        switch (cpid) {
+        case -1: {
+            fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process! (%s)\n", strerror(errno));
+            clean_up(sem_id, shm_id, msg_id);
+            return 7;
+        }
+        case 0: {
+            // Change!!
+            const char *exec_prog = (cproc == 0) ? "./bin/dostawcy" : (cproc == 1) ? "./bin/dostawcy"
+                                                                                   : "./bin/fabryka";
+            execl(exec_prog, exec_prog, NULL);
+
+            // execl returns = error
+            fprintf(stderr, "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n", exec_prog, strerror(errno));
+            clean_up(sem_id, shm_id, msg_id);
+            return 7;
+        }
+        default:
+            child_processes[cproc] = cpid;
+        };
+    }
+
+    // Wait for child processes to finish
+    for (int i = 0; i < 1; i++) {
+        pid_t child_pid = child_processes[i];
+
+        int status = -1;
+        if (waitpid(child_pid, &status, 0) < 0) {
+            fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for child termination! (%s)\n", strerror(errno));
+            clean_up(sem_id, shm_id, msg_id);
+        }
+
+        if (WIFEXITED(status))
+            printf("[Dyrektor] Child process %d has terminated (code %d)\n", child_pid, WEXITSTATUS(status));
+    }
+
+    for (int r = 0; r < magazine_rows; r++) {
+        printf("| ");
+        for (int c = 0; c < magazine_cols; c++) {
+            printf("%c ", magazine->magazine_racks[INDEX_2D(r, c, magazine)]);
+            if (c + 1 == magazine_cols)
+                printf("|\n");
+            else
+                printf(", ");
+        }
+    }
+
+    clean_up(sem_id, shm_id, msg_id);
+    return 0;
+}
+
+/*
     if (restore_state() < 0) {
         clean_up(sem_id, shm_id, msg_id);
         return 5;
@@ -158,22 +222,7 @@ int main(void) {
     return 0;
 }
 
-void clean_up(int sem_id, int shm_id, int msg_id) {
-    if (shm_id > 0 && shmctl(shm_id, IPC_RMID, NULL) == -1) {
-        fprintf(stderr, "Failed to clean up Shared Memory segment! (%s)\n", strerror(errno));
-        exit(10);
-    }
-    if (sem_id > 0 && semctl(sem_id, 0, IPC_RMID) == -1) {
-        fprintf(stderr, "Failed to clean up Semaphore Set! (%s)\n", strerror(errno));
-        exit(11);
-    }
-    if (msg_id > 0 && msgctl(msg_id, IPC_RMID, NULL) == -1) {
-        fprintf(stderr, "Failed to clean up Message Queue! (%s)\n", strerror(errno));
-        exit(12);
-    }
 
-    return;
-}
 
 void *handle_user_interface(void *ui_data) {
     UI_data *u_data = (UI_data *)ui_data;
@@ -252,7 +301,7 @@ int restore_state() {
         return 0;
     }
 
-    if (fread(magazine, sizeof(SHM_DATA), 1, in_file) != 1) {
+    if (fread(magazine, sizeof(Magazine), 1, in_file) != 1) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to restore magazine state! (%s)\n", strerror(errno));
         return -1;
     }
@@ -277,7 +326,7 @@ int save_state() {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to save magazine to a file! (%s)\n", strerror(errno));
         return -1;
     }
-    if (fwrite(magazine, sizeof(SHM_DATA), 1, out_file) != 1) {
+    if (fwrite(magazine, sizeof(Magazine), 1, out_file) != 1) {
         fprintf(stderr, "[Dyrektor][ERRN] Failed to write magazine to a file! (%s)\n", strerror(errno));
         return -1;
     }
@@ -291,11 +340,29 @@ int save_state() {
     fclose(out_file);
     return 0;
 }
+*/
+
+void clean_up(int sem_id, int shm_id, int msg_id) {
+    if (shm_id > 0 && shmctl(shm_id, IPC_RMID, NULL) == -1) {
+        fprintf(stderr, "Failed to clean up Shared Memory segment! (%s)\n", strerror(errno));
+        exit(10);
+    }
+    if (sem_id > 0 && semctl(sem_id, 0, IPC_RMID) == -1) {
+        fprintf(stderr, "Failed to clean up Semaphore Set! (%s)\n", strerror(errno));
+        exit(11);
+    }
+    if (msg_id > 0 && msgctl(msg_id, IPC_RMID, NULL) == -1) {
+        fprintf(stderr, "Failed to clean up Message Queue! (%s)\n", strerror(errno));
+        exit(12);
+    }
+
+    return;
+}
 
 void *sig_handler(int sig_num) {
     if (sig_num == SIGINT) {
         write(1, "[Dyrektor][SIGNAL] Received SIGINT!\n", 38);
-        save_state();
+        //        save_state();
         clean_up(sem_id, shm_id, msg_id);
         exit(0);
     }

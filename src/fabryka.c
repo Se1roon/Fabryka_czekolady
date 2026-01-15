@@ -152,7 +152,9 @@ void *station_1(void *station_data) {
             }
         }
 
+#ifdef USE_USLEEP
         usleep(3000);
+#endif
     }
 
     return (void *)0;
@@ -201,7 +203,9 @@ void *station_2(void *station_data) {
             }
         }
 
+#ifdef USE_USLEEP
         usleep(3000);
+#endif
     }
 
     return (void *)0;

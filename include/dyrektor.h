@@ -3,11 +3,11 @@
 
 #include <sys/types.h>
 
-#include "common.h"
+#include "magazine.h"
 
 typedef struct {
     pid_t *children;
-    SHM_DATA *data;
+    Magazine *data;
 } UI_data;
 
 void clean_up(int sem_id, int shm_id, int msg_id);
