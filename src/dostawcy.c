@@ -96,7 +96,6 @@ int main() {
             // UNLOCK
             semop(sem_id, &unlock, 1);
 
-            // Yield CPU (Basic flow control)
             sched_yield();
         }
     }

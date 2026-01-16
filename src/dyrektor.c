@@ -3,11 +3,6 @@
 
 #include "../include/common.h"
 
-// TODO: Add error checks
-// TODO: Change the way dyrektor sends signals to dostawcy and fabryka
-//		 Instead of sending CmdMsg send a real signal (and handled it)
-
-
 static int shm_id = -1;
 static int sem_id = -1;
 static int msg_id = -1;
@@ -18,10 +13,11 @@ static void signal_handler(int sig_num);
 
 void *handle_user_interface(void *child_processes);
 
-void clean_up();
 void print_status();
-void save_state();
 void handle_help_command();
+
+void save_state();
+void clean_up();
 
 
 int main() {
@@ -169,9 +165,9 @@ void *handle_user_interface(void *child_processes) {
     struct sembuf lock = {0, -1, 0};
     struct sembuf unlock = {0, 1, 0};
 
-    printf("\nType help for a list of available commands!\n\n");
+    printf("\nType help for a list of available commands!\n");
     while (true) {
-        printf(">");
+        printf("\n>");
         fflush(stdout);
 
         if (getline(&command, &command_len, stdin) != -1) {
@@ -188,10 +184,10 @@ void *handle_user_interface(void *child_processes) {
                 semop(sem_id, &lock, 1);
 
                 printf("Factory is %s\n", factory_work ? "ON" : "OFF");
-                printf("Suppliers is %s\n", suppliers_work ? "ON" : "OFF");
+                printf("Suppliers is %s\n\n", suppliers_work ? "ON" : "OFF");
 
                 printf("Type1 chocolate produced: %d\n", magazine->type1_produced);
-                printf("Type2 chocolate produced: %d\n", magazine->type2_produced);
+                printf("Type2 chocolate produced: %d\n\n", magazine->type2_produced);
 
                 print_status();
 
@@ -204,7 +200,8 @@ void *handle_user_interface(void *child_processes) {
                 kill(children[1], SIGUSR1);
                 factory_work = !factory_work;
                 send_log(msg_id, "[Director] Sent %s signal to Factory!", factory_work ? "ON" : "OFF");
-            }
+            } else
+                handle_help_command();
         }
     }
 
@@ -257,4 +254,6 @@ void save_state() {
         fwrite(magazine, sizeof(Magazine), 1, f);
         fclose(f);
     }
+
+    send_log(msg_id, "[Director] Saved magazine state!");
 }
