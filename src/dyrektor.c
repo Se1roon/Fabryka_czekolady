@@ -202,6 +202,11 @@ void *handle_user_interface(void *child_processes) {
                 send_log(msg_id, "[Director] Sent %s signal to Factory!", factory_work ? "ON" : "OFF");
             } else
                 handle_help_command();
+        } else {
+            kill(children[0], SIGINT);
+            kill(children[1], SIGINT);
+            kill(children[2], SIGINT);
+            break; // Exit on CTRL+D or error
         }
     }
 

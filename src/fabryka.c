@@ -115,7 +115,6 @@ void worker(int type, int shm_id, int sem_id, int msg_id) {
 
     send_log(msg_id, "Worker %d started.", type);
 
-    bool waiting_for_components = false;
     while (1) {
         if (is_active) {
             semop(sem_id, &lock, 1);
@@ -181,12 +180,7 @@ void worker(int type, int shm_id, int sem_id, int msg_id) {
                 inv.has_B = 0;
                 inv.has_C = 0;
                 send_log(msg_id, "[Factory] Worker 1 PRODUCED Chocolate (Total: %d)", produced);
-                waiting_for_components = false;
-            } else if (type == 1 && !waiting_for_components) {
-                send_log(msg_id, "[Factory] Not enough components for Type 1!");
-                waiting_for_components = true;
             }
-
             if (type == 2 && inv.has_A && inv.has_B && inv.has_D) {
                 produced++;
                 magazine->type2_produced++;
@@ -194,10 +188,6 @@ void worker(int type, int shm_id, int sem_id, int msg_id) {
                 inv.has_B = 0;
                 inv.has_D = 0;
                 send_log(msg_id, "[Factory] Worker 2 PRODUCED Chocolate (Total: %d)", produced);
-                waiting_for_components = false;
-            } else if (type == 2) {
-                send_log(msg_id, "[Factory] Not enough components for Type 2!");
-                waiting_for_components = true;
             }
 
             semop(sem_id, &unlock, 1);
