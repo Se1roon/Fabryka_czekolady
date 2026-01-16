@@ -1,231 +1,184 @@
-#include <errno.h>
-#include <fcntl.h>
-#include <pthread.h>
-#include <signal.h>
+#include <sched.h>
 #include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ipc.h>
-#include <sys/msg.h>
-#include <sys/sem.h>
-#include <sys/shm.h>
-#include <unistd.h>
 
 #include "../include/common.h"
-#include "../include/fabryka.h"
-#include "../include/logging.h"
 
-static void *sig_handler(int sig_num);
+typedef struct {
+    int has_A;
+    int has_B;
+    int has_C;
+    int has_D;
+} Inventory;
 
-static bool stations_work = INIT_WORK;
-
-static SHM_DATA *magazine = NULL;
+static pid_t workers[2];
 static int msg_id = -1;
+static bool is_active = true;
+
+static void signal_handler_parent(int sig_num);
+static void signal_handler_children(int sig_num);
+
+void worker(int type, int shm_id, int sem_id, int msg_id);
 
 
-int main(void) {
-    struct sigaction sig_action;
-    sig_action.sa_handler = (void *)sig_handler;
-    sigemptyset(&sig_action.sa_mask);
-    sig_action.sa_flags = SA_RESTART;
-
-    if (sigaction(SIGUSR1, &sig_action, NULL) != 0) {
-        fprintf(stderr, "[Fabryka][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
+int main() {
+    if (signal(SIGINT, signal_handler_parent) == SIG_ERR) {
+        fprintf(stderr, "[Factory] Failed to assign signal handler to SIGINT! (%s)\n", strerror(errno));
         return -1;
     }
-    if (sigaction(SIGINT, &sig_action, NULL) != 0) {
-        fprintf(stderr, "[Fabryka][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
+    if (signal(SIGUSR1, signal_handler_parent) == SIG_ERR) {
+        fprintf(stderr, "[Factory] Failed to assign signal handler to SIGUSR1! (%s)\n", strerror(errno));
         return -1;
     }
 
-    // Obtain IPC key
-    key_t ipc_key = ftok(".", 69);
-    if (ipc_key == -1) {
-        fprintf(stderr, "[Fabryka][ERRN] Unable to create IPC Key! (%s)\n", strerror(errno));
-        return 1;
-    }
+    key_t ipc_key = ftok(".", IPC_KEY_ID);
 
-    // Join the Message Queue for logging
-    msg_id = msgget(ipc_key, IPC_CREAT | 0600);
-    if (msg_id == -1) {
-        fprintf(stderr, "[Logging][ERRN] Unable to join the Message Queue! (%s)\n", strerror(errno));
-        return 2;
-    }
-
-    // Join the Semaphore Set
+    int shm_id = shmget(ipc_key, sizeof(Magazine), IPC_CREAT | 0600);
     int sem_id = semget(ipc_key, 1, IPC_CREAT | 0600);
-    if (sem_id == -1) {
-        fprintf(stderr, "[Fabryka][ERRN] Unable to join Semaphore Set! (%s)\n", strerror(errno));
-        write_log(msg_id, "[Fabryka][ERRN] Unable to join Semaphore Set!");
-        return 3;
-    }
+    msg_id = msgget(ipc_key, IPC_CREAT | 0600);
 
-    // Join the Shared Memory segment
-    int shm_id = shmget(ipc_key, sizeof(SHM_DATA), IPC_CREAT | 0600);
-    if (shm_id == -1) {
-        fprintf(stderr, "[Fabryka][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
-        write_log(msg_id, "[Fabryka][ERRN] Unable to create Shared Memory segment!");
-        return 4;
-    }
+    pid_t worker1 = fork();
+    if (worker1 == 0)
+        worker(1, shm_id, sem_id, msg_id);
 
-    // Attach to Shared Memory
-    magazine = (SHM_DATA *)shmat(shm_id, 0, 0);
-    if (magazine == (void *)-1) {
-        fprintf(stderr, "[Fabryka][ERRN] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
-        write_log(msg_id, "[Fabryka][ERRN] Failed to attach to Shared Memory segment!");
-        return 4;
-    }
+    pid_t worker2 = fork();
+    if (worker2 == 0)
+        worker(2, shm_id, sem_id, msg_id);
 
-    pthread_t s1_pid; // TID of stanowisko_1
-    pthread_t s2_pid; // TID of stanowisko_2
+    workers[0] = worker1;
+    workers[1] = worker2;
 
-    station_t station_data;
-    station_data.sem_id = sem_id;
-    station_data.msg_id = msg_id;
-    station_data.magazine_data = magazine;
-
-    if ((errno = pthread_create(&s1_pid, NULL, station_1, (void *)&station_data)) != 0) {
-        fprintf(stderr, "[Fabryka][ERRN] Failed to create Station 1! (%s)\n", strerror(errno));
-        write_log(msg_id, "[Fabryka][ERRN] Failed to create Station 1!");
-        return 5;
-    }
-    if ((errno = pthread_create(&s2_pid, NULL, station_2, (void *)&station_data)) != 0) {
-        fprintf(stderr, "[Fabryka][ERRN] Failed to create Station 2! (%s)\n", strerror(errno));
-        write_log(msg_id, "[Fabryka][ERRN] Failed to create Station 2!");
-        return 5;
-    }
-
-    if ((errno = pthread_join(s1_pid, NULL)) != 0) {
-        fprintf(stderr, "[Fabryka][ERRN] Failed to wait for Station 1 to finish! (%s)\n", strerror(errno));
-        return 6;
-    }
-    if ((errno = pthread_join(s2_pid, NULL)) != 0) {
-        fprintf(stderr, "[Fabryka][ERRN] Failed to wait for Station 2 to finish! (%s)\n", strerror(errno));
-        return 6;
-    }
+    wait(NULL);
+    wait(NULL);
 
     return 0;
 }
 
-void *station_1(void *station_data) {
-    station_t *s_data = (station_t *)station_data;
 
-    int sem_id = s_data->sem_id;
-    int msg_id = s_data->msg_id;
-    SHM_DATA *mag_data = s_data->magazine_data;
-
-    struct sembuf sem_op;
-    sem_op.sem_num = 0;
-    sem_op.sem_flg = 0;
-
-    bool waiting_for_components = false;
-    while (true) {
-        if (stations_work) {
-            sem_op.sem_op = -1;
-            if (semop(sem_id, &sem_op, 1) == -1) {
-                fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
-                write_log(msg_id, "[Fabryka][ERRN] Failed to perform semaphore operation!");
-                return (void *)1;
-            }
-
-            if (mag_data->a_count > 0 && mag_data->b_count > 0 && mag_data->c_count > 0) {
-                mag_data->a_count--;
-                mag_data->b_count--;
-                mag_data->c_count--;
-                mag_data->type1_produced++;
-
-                waiting_for_components = false;
-
-                if (mag_data->type1_produced % 200 == 0)
-                    write_log(msg_id, "[Fabryka][INFO] Produced 200 type 1 chocolate!");
-            } else if (!waiting_for_components) {
-                write_log(msg_id, "[Fabryka][INFO] Waiting for type1 components!");
-                waiting_for_components = true;
-            }
-
-            sem_op.sem_op = 1;
-            if (semop(sem_id, &sem_op, 1) == -1) {
-                fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
-                write_log(msg_id, "[Fabryka][ERRN] Failed to perform semaphore operation!");
-                return (void *)1;
-            }
-        }
-
-#ifdef USE_USLEEP
-        usleep(3000);
-#endif
+void worker(int type, int shm_id, int sem_id, int msg_id) {
+    if (signal(SIGINT, signal_handler_children) == SIG_ERR) {
+        fprintf(stderr, "[Factory: Worker %d] Failed to assign signal handler to SIGINT! (%s)\n", type, strerror(errno));
+        exit(-1);
+    }
+    if (signal(SIGUSR1, signal_handler_children) == SIG_ERR) {
+        fprintf(stderr, "[Factory: Worker %d] Failed to assign signal handler to SIGUSR1! (%s)\n", type, strerror(errno));
+        exit(-1);
     }
 
-    return (void *)0;
-}
+    Magazine *magazine = (Magazine *)shmat(shm_id, NULL, 0);
 
-void *station_2(void *station_data) {
-    station_t *s_data = (station_t *)station_data;
+    struct sembuf lock = {0, -1, 0};
+    struct sembuf unlock = {0, 1, 0};
 
-    int sem_id = s_data->sem_id;
-    SHM_DATA *mag_data = s_data->magazine_data;
+    Inventory inv = {0};
+    int produced = 0;
 
-    struct sembuf sem_op;
-    sem_op.sem_num = 0;
-    sem_op.sem_flg = 0;
+    send_log(msg_id, "Worker %d started.", type);
 
-    bool waiting_for_components = false;
-    while (true) {
-        if (stations_work) {
-            sem_op.sem_op = -1;
-            if (semop(sem_id, &sem_op, 1) == -1) {
-                fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
-                write_log(msg_id, "[Fabryka][ERRN] Failed to perform semaphore operation!");
-                return (void *)1;
+    while (1) {
+        if (is_active) {
+            semop(sem_id, &lock, 1);
+
+            if (magazine->current_usage > 0) {
+                // Peek at the Head of the Ring
+                char item = magazine->buffer[magazine->head];
+                int size = GET_SIZE(item);
+                int idx = GET_TYPE_IDX(item);
+                int needed = 0;
+
+                // Decision: Do I need this item?
+                if (item == 'A' && !inv.has_A)
+                    needed = 1;
+                else if (item == 'B' && !inv.has_B)
+                    needed = 1;
+                else if (type == 1 && item == 'C' && !inv.has_C)
+                    needed = 1;
+                else if (type == 2 && item == 'D' && !inv.has_D)
+                    needed = 1;
+
+                if (needed) {
+                    // CONSUME: Take from Head
+                    magazine->head = (magazine->head + size) % MAGAZINE_CAPACITY;
+                    magazine->current_usage -= size;
+                    magazine->component_counts[idx]--;
+
+                    if (item == 'A')
+                        inv.has_A = 1;
+                    if (item == 'B')
+                        inv.has_B = 1;
+                    if (item == 'C')
+                        inv.has_C = 1;
+                    if (item == 'D')
+                        inv.has_D = 1;
+                } else {
+                    int slots_occupied = magazine->component_counts[idx] * size;
+                    bool is_clogged = magazine->current_usage >= MAGAZINE_CAPACITY - 10;
+                    bool oversupply = slots_occupied > SLOTS_LIMIT;
+
+                    if (is_clogged || oversupply) {
+                        // Remote the component
+                        magazine->head = (magazine->head + size) % MAGAZINE_CAPACITY;
+                        magazine->current_usage -= size;
+                        magazine->component_counts[idx]--;
+                    } else {
+                        // RECYCLE: Move from Head to Tail (Rotate Ring)
+                        // We physically copy the data to the tail and increment both pointers
+                        for (int k = 0; k < size; k++) {
+                            char val = magazine->buffer[(magazine->head + k) % MAGAZINE_CAPACITY];
+                            magazine->buffer[(magazine->tail + k) % MAGAZINE_CAPACITY] = val;
+                        }
+                        magazine->head = (magazine->head + size) % MAGAZINE_CAPACITY;
+                        magazine->tail = (magazine->tail + size) % MAGAZINE_CAPACITY;
+                        // Usage count remains the same
+                    }
+                }
             }
 
-            if (mag_data->a_count && mag_data->b_count && mag_data->d_count) {
-                mag_data->a_count--;
-                mag_data->b_count--;
-                mag_data->d_count--;
-                mag_data->type2_produced++;
-
-                waiting_for_components = false;
-
-                if (mag_data->type2_produced % 200 == 0)
-                    write_log(msg_id, "[Fabryka][INFO] Produced 200 type 2 chocolate!");
-            } else if (!waiting_for_components) {
-                write_log(msg_id, "[Fabryka][INFO] Waiting for type2 components!");
-                waiting_for_components = true;
+            // Check Recipe
+            if (type == 1 && inv.has_A && inv.has_B && inv.has_C) {
+                produced++;
+                magazine->type1_produced++;
+                inv.has_A = 0;
+                inv.has_B = 0;
+                inv.has_C = 0;
+                send_log(msg_id, "Worker 1 PRODUCED Chocolate (Total: %d)", produced);
+            }
+            if (type == 2 && inv.has_A && inv.has_B && inv.has_D) {
+                produced++;
+                magazine->type2_produced++;
+                inv.has_A = 0;
+                inv.has_B = 0;
+                inv.has_D = 0;
+                send_log(msg_id, "Worker 2 PRODUCED Chocolate (Total: %d)", produced);
             }
 
-            sem_op.sem_op = 1;
-            if (semop(sem_id, &sem_op, 1) == -1) {
-                fprintf(stderr, "[Fabryka][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
-                write_log(msg_id, "[Fabryka][ERRN] Failed to perform semaphore operation!");
-                return (void *)1;
-            }
+            semop(sem_id, &unlock, 1);
+
+            sched_yield();
         }
-
-#ifdef USE_USLEEP
-        usleep(3000);
-#endif
     }
 
-    return (void *)0;
+    send_log(msg_id, "Worker %d stopped. Total produced: %d", type, produced);
+    shmdt(magazine);
+    exit(0);
 }
 
-void write_log(int msg_id, char *message) {
-    LogMessage log_msg;
-    log_msg.mtype = 2;
-    strncpy(log_msg.message, message, LOG_MESSAGE_MAX_LEN - 1);
-    log_msg.message[LOG_MESSAGE_MAX_LEN - 1] = '\0';
-
-    msgsnd(msg_id, &log_msg, sizeof(log_msg.message), 0);
+void signal_handler_parent(int sig_num) {
+    if (sig_num == SIGINT) {
+        kill(workers[0], SIGINT);
+        kill(workers[1], SIGINT);
+    } else if (sig_num == SIGUSR1) {
+        kill(workers[0], SIGUSR1);
+        kill(workers[1], SIGUSR1);
+    }
 }
 
-void *sig_handler(int sig_num) {
-    if (sig_num == SIGUSR1) {
-        stations_work = !stations_work;
-    } else if (sig_num == SIGINT) {
+void signal_handler_children(int sig_num) {
+    if (sig_num == SIGINT) {
+        send_log(msg_id, "[Factory] Received SIGINT... Terminating\n");
         exit(0);
     }
-
-    return NULL;
+    if (sig_num == SIGUSR1) {
+        is_active = !is_active;
+        send_log(msg_id, "[Factory] Received %s (SIGUSR1)... Switching!\n", is_active ? "ON" : "OFF");
+    }
 }

@@ -1,9 +1,9 @@
 CC = clang
 CFLAGS = -Wall -Wextra
 
-run: directories bin/dyrektor bin/logging bin/dostawcy bin/fabryka
+run: bin/dyrektor bin/logger bin/dostawcy bin/fabryka
 
-bin/logging: src/logging.c
+bin/logger: src/logger.c
 	$(CC) $^ -o $@ $(CFLAGS)
 
 bin/dostawcy: src/dostawcy.c
@@ -20,5 +20,5 @@ directories:
 
 clean:
 	rm -rf bin/
-	rm .magazyn
-	rm .fc.log
+	rm magazine.bin
+	rm simulation.log

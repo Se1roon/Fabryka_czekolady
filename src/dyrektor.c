@@ -1,201 +1,134 @@
-#include <errno.h>
 #include <pthread.h>
-#include <signal.h>
 #include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ipc.h>
-#include <sys/msg.h>
-#include <sys/sem.h>
-#include <sys/shm.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
-#include "../include/dyrektor.h"
-#include "../include/magazine.h"
+#include "../include/common.h"
 
-// TODO: MAGAZYN MA BYC RING XDDDDDDD A NIE LICZBY
-// Magazyn to tablico o N bajtach pojemnosci (A, 2 = 1 bajt, C = 2 bajty, D = 3 bajty)
-//
+// TODO: Add error checks
+// TODO: Change the way dyrektor sends signals to dostawcy and fabryka
+//		 Instead of sending CmdMsg send a real signal (and handled it)
 
-// TODO: Add log colorization
-// TODO: Add log writes in dostawcy
-// TODO: Handle deattaching from Shared Memory if that's necessary
-// TODO: Update README, create documentation
-// TODO: Add tests
-// TODO: (?) Delete usleeps
 
-static void *sig_handler(int sig_num);
-
-union semun {
-    int value;
-    struct semid_ds *buf;
-    unsigned short *array;
-};
-
-static int sem_id = -1;
 static int shm_id = -1;
+static int sem_id = -1;
 static int msg_id = -1;
-static Magazine *magazine = NULL;
+
+static Magazine *magazine;
+
+static void signal_handler(int sig_num);
+
+void *handle_user_interface(void *child_processes);
+
+void clean_up();
+void print_status();
+void save_state();
+void handle_help_command();
 
 
-int main(void) {
-    struct sigaction sig_action;
-    sig_action.sa_handler = (void *)sig_handler;
-    sigemptyset(&sig_action.sa_mask);
-    sig_action.sa_flags = SA_RESTART;
-
-    if (sigaction(SIGINT, &sig_action, NULL) != 0) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to initialize signal handling! (%s)\n", strerror(errno));
+int main() {
+    if (signal(SIGINT, signal_handler) == SIG_ERR) {
+        fprintf(stderr, "[Director] Failed to assign signal handler to SIGINT! (%s)\n", strerror(errno));
         return -1;
     }
 
-    // Obtain IPC key
-    key_t ipc_key = ftok(".", 69);
+    key_t ipc_key = ftok(".", IPC_KEY_ID);
     if (ipc_key == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Unable to create IPC Key! (%s)\n", strerror(errno));
-        return 1;
+        fprintf(stderr, "[Director] Failed to create key for IPC communication! (%s)\n", strerror(errno));
+        return -1;
     }
 
-    // Create Message Queue for Logging
-    msg_id = msgget(ipc_key, IPC_CREAT | IPC_EXCL | 0600);
-    if (msg_id == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Unable to create Message Queue! (%s)\n", strerror(errno));
-        return 2;
-    }
-
-    // Create Semaphore Set
-    sem_id = semget(ipc_key, 1, IPC_CREAT | IPC_EXCL | 0600);
-    if (sem_id == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Unable to create Semaphore Set! (%s)\n", strerror(errno));
-        clean_up(-1, -1, msg_id);
-        return 3;
-    }
-
-    // Initialize Semaphore Set to 1
-    union semun arg;
-    arg.value = 1;
-    if (semctl(sem_id, 0, SETVAL, arg) == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Unable to initialize Semaphore Set! (%s)\n", strerror(errno));
-        clean_up(sem_id, -1, msg_id);
-        return 3;
-    }
-
-    int magazine_cols = -1;
-    int magazine_rows = -1;
-    calculate_cols_rows(&magazine_cols, &magazine_rows);
-    printf("ROWS = %d, COLS = %d\n\n", magazine_rows, magazine_cols);
-    // LOG: Write the results to log
-
-    // Create Shared Memory segment (initialized with 0s)
     shm_id = shmget(ipc_key, sizeof(Magazine), IPC_CREAT | IPC_EXCL | 0600);
     if (shm_id == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Unable to create Shared Memory segment! (%s)\n", strerror(errno));
-        clean_up(sem_id, -1, msg_id);
-        return 4;
-    }
-    magazine = (Magazine *)shmat(shm_id, 0, 0);
-    magazine->columns = magazine_cols;
-    magazine->rows = magazine_rows;
-    magazine->space_left = MAGAZINE_CAPACITY;
-    // Detach?
-
-    pid_t child_processes[1]; // Dostawcy, Fabryka, Logging
-
-    // Start child processes
-    for (int cproc = 0; cproc < 1; cproc++) {
-        pid_t cpid = fork();
-        switch (cpid) {
-        case -1: {
-            fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process! (%s)\n", strerror(errno));
-            clean_up(sem_id, shm_id, msg_id);
-            return 7;
-        }
-        case 0: {
-            // Change!!
-            const char *exec_prog = (cproc == 0) ? "./bin/dostawcy" : (cproc == 1) ? "./bin/dostawcy"
-                                                                                   : "./bin/fabryka";
-            execl(exec_prog, exec_prog, NULL);
-
-            // execl returns = error
-            fprintf(stderr, "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n", exec_prog, strerror(errno));
-            clean_up(sem_id, shm_id, msg_id);
-            return 7;
-        }
-        default:
-            child_processes[cproc] = cpid;
-        };
+        fprintf(stderr, "[Director] Failed to create Shared Memory segment! (%s)\n", strerror(errno));
+        return -1;
     }
 
-    // Wait for child processes to finish
-    for (int i = 0; i < 1; i++) {
-        pid_t child_pid = child_processes[i];
-
-        int status = -1;
-        if (waitpid(child_pid, &status, 0) < 0) {
-            fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for child termination! (%s)\n", strerror(errno));
-            clean_up(sem_id, shm_id, msg_id);
-        }
-
-        if (WIFEXITED(status))
-            printf("[Dyrektor] Child process %d has terminated (code %d)\n", child_pid, WEXITSTATUS(status));
+    magazine = (Magazine *)shmat(shm_id, NULL, 0);
+    if (magazine == (void *)-1) {
+        fprintf(stderr, "[Director] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
+        clean_up();
+        return -1;
     }
 
-    for (int r = 0; r < magazine_rows; r++) {
-        printf("| ");
-        for (int c = 0; c < magazine_cols; c++) {
-            printf("%c ", magazine->magazine_racks[INDEX_2D(r, c, magazine)]);
-            if (c + 1 == magazine_cols)
-                printf("|\n");
-            else
-                printf(", ");
-        }
+    sem_id = semget(ipc_key, 1, IPC_CREAT | IPC_EXCL | 0600);
+    if (sem_id == -1) {
+        fprintf(stderr, "[Director] Failed to create Semaphore Set! (%s)\n", strerror(errno));
+        clean_up();
+        return -1;
     }
 
-    clean_up(sem_id, shm_id, msg_id);
-    return 0;
-}
-
-/*
-    if (restore_state() < 0) {
-        clean_up(sem_id, shm_id, msg_id);
-        return 5;
+    union semun arg;
+    arg.val = 1;
+    if (semctl(sem_id, 0, SETVAL, arg) == -1) {
+        fprintf(stderr, "[Director] Failed to initialize Semaphore! (%s)\n", strerror(errno));
+        clean_up();
+        return -1;
     }
 
-    pid_t child_processes[3]; // Dostawcy, Fabryka, Logging
-
-    UI_data ui_data;
-    ui_data.children = child_processes;
-    ui_data.data = magazine;
-    pthread_t uint_tid; // User interface TID
-    if ((errno = pthread_create(&uint_tid, NULL, handle_user_interface, (void *)&ui_data)) != 0) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to create Thread! (%s)\n", strerror(errno));
-        return 6;
+    msg_id = msgget(ipc_key, IPC_CREAT | IPC_EXCL | 0600);
+    if (msg_id == -1) {
+        fprintf(stderr, "[Director] Failed to create Message Queue! (%s)\n", strerror(errno));
+        clean_up();
+        return -1;
     }
 
-    // Start child processes
-    for (int cproc = 0; cproc < 3; cproc++) {
-        pid_t cpid = fork();
-        switch (cpid) {
-        case -1: {
-            fprintf(stderr, "[Dyrektor][main][ERRN] Failed to create child process! (%s)\n", strerror(errno));
-            clean_up(sem_id, shm_id, msg_id);
-            return 7;
-        }
-        case 0: {
-            const char *exec_prog = (cproc == 0) ? "./bin/logging" : (cproc == 1) ? "./bin/dostawcy"
-                                                                                  : "./bin/fabryka";
-            execl(exec_prog, exec_prog, NULL);
+    send_log(msg_id, "[Director] IPC Resources created!");
+    send_log(msg_id, "[Director] Spawning child processes...");
 
-            // execl returns = error
-            fprintf(stderr, "[Dyrektor][ERRN] Failed to execute %s program! (%s)\n", exec_prog, strerror(errno));
-            clean_up(sem_id, shm_id, msg_id);
-            return 7;
-        }
-        default:
-            child_processes[cproc] = cpid;
-        };
+    pid_t logger_pid = fork();
+    if (logger_pid == -1) {
+        fprintf(stderr, "[Director] Failed to create child process! (%s)\n", strerror(errno));
+        send_log(msg_id, "[Director] Failed to create child process! (%s)\n", strerror(errno));
+        clean_up();
+        return -1;
+    }
+    if (logger_pid == 0) {
+        execl("./bin/logger", "./bin/logger", NULL);
+        fprintf(stderr, "[Director] Failed to start Logger process! (%s)\n", strerror(errno));
+        send_log(msg_id, "[Director] Failed to start Logger process! (%s)\n", strerror(errno));
+        clean_up();
+        exit(1); // error if execl returned
+    }
+
+    pid_t suppliers_pid = fork();
+    if (suppliers_pid == -1) {
+        fprintf(stderr, "[Director] Failed to create child process! (%s)\n", strerror(errno));
+        send_log(msg_id, "[Director] Failed to create child process! (%s)\n", strerror(errno));
+        clean_up();
+        return -1;
+    }
+    if (suppliers_pid == 0) {
+        execl("./bin/dostawcy", "./bin/dostawcy", NULL);
+        fprintf(stderr, "[Director] Failed to start Dostawcy process! (%s)\n", strerror(errno));
+        send_log(msg_id, "[Director] Failed to start Dostawcy process! (%s)\n", strerror(errno));
+        clean_up();
+        exit(1); // error if execl returned
+    }
+
+    pid_t factory_pid = fork();
+    if (factory_pid == -1) {
+        fprintf(stderr, "[Director] Failed to create child process! (%s)\n", strerror(errno));
+        send_log(msg_id, "[Director] Failed to create child process! (%s)\n", strerror(errno));
+        clean_up();
+        return -1;
+    }
+    if (factory_pid == 0) {
+        execl("./bin/fabryka", "./bin/fabryka", NULL);
+        fprintf(stderr, "[Director] Failed to start Fabryka process! (%s)\n", strerror(errno));
+        send_log(msg_id, "[Director] Failed to start Fabryka process! (%s)\n", strerror(errno));
+        clean_up();
+        exit(1);
+    }
+
+    pid_t child_processes[3] = {suppliers_pid, factory_pid, logger_pid};
+
+    send_log(msg_id, "[Director] Spawned child processes!\n");
+
+    pthread_t interface;
+    if ((errno = pthread_create(&interface, NULL, handle_user_interface, (void *)child_processes)) != 0) {
+        fprintf(stderr, "[Director] Failed to start user interface! (%s)\n", strerror(errno));
+        send_log(msg_id, "[Director] Failed to start user interface! (%s)\n", strerror(errno));
+        clean_up();
+        return -1;
     }
 
     // Wait for child processes to finish
@@ -204,86 +137,73 @@ int main(void) {
 
         int status = -1;
         if (waitpid(child_pid, &status, 0) < 0) {
-            fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for child termination! (%s)\n", strerror(errno));
-            clean_up(sem_id, shm_id, msg_id);
+            fprintf(stderr, "[Director] Failed to wait for child termination! (%s)\n", strerror(errno));
+            send_log(msg_id, "[Director] Failed to wait for child termination! (%s)\n", strerror(errno));
         }
 
         if (WIFEXITED(status))
-            printf("[Dyrektor] Child process %d has terminated (code %d)\n", child_pid, WEXITSTATUS(status));
+            send_log(msg_id, "[Director] Child process %d has terminated (code %d)\n", child_pid, WEXITSTATUS(status));
     }
 
-    if ((errno = pthread_join(uint_tid, NULL)) != 0) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to wait for User Interface Thread to finish! (%s)\n", strerror(errno));
-        return 8;
+    if ((errno = pthread_join(interface, NULL)) != 0) {
+        fprintf(stderr, "[Director] Failed to wait for User Interface Thread to finish! (%s)\n", strerror(errno));
+        send_log(msg_id, "[Director] Failed to wait for User Interface Thread to finish! (%s)\n", strerror(errno));
     }
 
     save_state();
-    clean_up(sem_id, shm_id, msg_id);
+
+    send_log(msg_id, "TERMINATE");
+    clean_up();
     return 0;
 }
 
-
-
-void *handle_user_interface(void *ui_data) {
-    UI_data *u_data = (UI_data *)ui_data;
-
-    bool f_work = INIT_WORK;
-    bool d_work = INIT_WORK;
+void *handle_user_interface(void *child_processes) {
+    pid_t *children = (pid_t *)child_processes;
 
     char *command = NULL;
     size_t command_len = -1;
 
-    printf("Type help to see the list of available commands!\n");
+    bool factory_work = true;
+    bool suppliers_work = true;
+
+    struct sembuf lock = {0, -1, 0};
+    struct sembuf unlock = {0, 1, 0};
+
+    printf("\nType help for a list of available commands!\n\n");
     while (true) {
-        printf("\n> ");
-        if (getline(&command, &command_len, stdin) == -1) {
-            fprintf(stderr, "Unable to read user's command\n");
-        } else {
+        printf(">");
+        fflush(stdout);
+
+        if (getline(&command, &command_len, stdin) != -1) {
             command[command_len-- - 1] = 0; // Remove the trailing newline
 
-            if (strncmp(command, "quit", 4) == 0) {
-                kill(u_data->children[1], SIGINT);
-                kill(u_data->children[2], SIGINT);
-                kill(u_data->children[0], SIGINT);
+            if (strncmp(command, "help", 4) == 0) {
+                handle_help_command();
+            } else if (strncmp(command, "quit", 4) == 0) {
+                kill(children[0], SIGINT);
+                kill(children[1], SIGINT);
+                kill(children[2], SIGINT);
                 break;
             } else if (strncmp(command, "stats", 5) == 0) {
-                struct sembuf sem_op;
-                sem_op.sem_num = 0;
-                sem_op.sem_flg = 0;
-                sem_op.sem_op = -1;
-                semop(sem_id, &sem_op, 1);
+                semop(sem_id, &lock, 1);
 
-                printf("Fabryka is %s\n", f_work ? "ON" : "OFF");
-                printf("Dostawcy is %s\n\n", d_work ? "ON" : "OFF");
+                printf("Factory is %s\n", factory_work ? "ON" : "OFF");
+                printf("Suppliers is %s\n", suppliers_work ? "ON" : "OFF");
 
-                printf("Type 1 chocolate produced: %zu\n",
-                       u_data->data->type1_produced);
-                printf("Type 2 chocolate produced: %zu\n",
-                       u_data->data->type2_produced);
+                printf("Type1 chocolate produced: %d\n", magazine->type1_produced);
+                printf("Type2 chocolate produced: %d\n", magazine->type2_produced);
 
-                printf("\nMagazine state:\n");
-                printf("A = %zu\n", u_data->data->a_count);
-                printf("B = %zu\n", u_data->data->b_count);
-                printf("C = %zu\n", u_data->data->c_count);
-                printf("D = %zu\n", u_data->data->d_count);
+                print_status();
 
-                sem_op.sem_op = 1;
-                semop(sem_id, &sem_op, 1);
-            } else if (strncmp(command, "td", 2) == 0) {
-                // Sent SIGUSR1 to Dostawcy
-                kill(u_data->children[1], SIGUSR1);
-                d_work = !d_work;
-                printf("Dostawcy switched to %s\n", d_work ? "ON" : "OFF");
+                semop(sem_id, &unlock, 1);
+            } else if (strncmp(command, "ts", 2) == 0) {
+                kill(children[0], SIGUSR1);
+                suppliers_work = !suppliers_work;
+                send_log(msg_id, "[Director] Sent %s signal to Suppliers!", suppliers_work ? "ON" : "OFF");
             } else if (strncmp(command, "tf", 2) == 0) {
-                // Sent SIGUSR1 to Fabryka
-                kill(u_data->children[2], SIGUSR1);
-                f_work = !f_work;
-                printf("Fabryka switched to %s\n", f_work ? "ON" : "OFF");
-            } else if (strncmp(command, "help", 4) == 0) {
-                printf("\nstats - Shows the state of factory and deliveries as well as the number of chocolate produced.\n");
-                printf("td    - Toggles the deliveries\n");
-                printf("tf    - Toggles the factory\n");
-                printf("quit  - Quits\n\n");
+                kill(children[1], SIGUSR1);
+                factory_work = !factory_work;
+                send_log(msg_id, "[Director] Sent %s signal to Factory!", factory_work ? "ON" : "OFF");
             }
         }
     }
@@ -292,80 +212,49 @@ void *handle_user_interface(void *ui_data) {
     return NULL;
 }
 
-
-int restore_state() {
-    FILE *in_file = fopen(SAVE_FILE, "r");
-    if (!in_file) {
-        fprintf(stderr, "[Dyrektor][WARN] Failed to open magazine file! (%s)\n", strerror(errno));
-        fprintf(stderr, "[Dyrektor][INFO] Continuing without restoring magazine state!\n");
-        return 0;
-    }
-
-    if (fread(magazine, sizeof(Magazine), 1, in_file) != 1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to restore magazine state! (%s)\n", strerror(errno));
-        return -1;
-    }
-
-    fclose(in_file);
-    return 0;
+void handle_help_command() {
+    printf("\nstats - Shows the state of factory and suppliers, magazine state and chocolate produced\n");
+    printf("ts	  - Toggles the Suppliers (ON/OFF)\n");
+    printf("tf	  - Toggles the Factory (ON/OFF)\n");
+    printf("quit  - Quits\n\n");
 }
 
-int save_state() {
-    struct sembuf sem_op;
-    sem_op.sem_num = 0;
-    sem_op.sem_flg = 0;
-    sem_op.sem_op = -1;
-
-    if (semop(sem_id, &sem_op, 1) == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
-        return -1;
+void print_status() {
+    printf("\n--- MAGAZINE (Usage: %d/%d) ---\n[ ", magazine->current_usage, MAGAZINE_CAPACITY);
+    // Visualize ring buffer linearly
+    for (int i = 0; i < MAGAZINE_CAPACITY; i++) {
+        char c = magazine->buffer[i];
+        printf("%c", c ? c : '.');
     }
-
-    FILE *out_file = fopen(SAVE_FILE, "w");
-    if (!out_file) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to save magazine to a file! (%s)\n", strerror(errno));
-        return -1;
-    }
-    if (fwrite(magazine, sizeof(Magazine), 1, out_file) != 1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to write magazine to a file! (%s)\n", strerror(errno));
-        return -1;
-    }
-
-    sem_op.sem_op = 1;
-    if (semop(sem_id, &sem_op, 1) == -1) {
-        fprintf(stderr, "[Dyrektor][ERRN] Failed to perform semaphore operation! (%s)\n", strerror(errno));
-        return -1;
-    }
-
-    fclose(out_file);
-    return 0;
-}
-*/
-
-void clean_up(int sem_id, int shm_id, int msg_id) {
-    if (shm_id > 0 && shmctl(shm_id, IPC_RMID, NULL) == -1) {
-        fprintf(stderr, "Failed to clean up Shared Memory segment! (%s)\n", strerror(errno));
-        exit(10);
-    }
-    if (sem_id > 0 && semctl(sem_id, 0, IPC_RMID) == -1) {
-        fprintf(stderr, "Failed to clean up Semaphore Set! (%s)\n", strerror(errno));
-        exit(11);
-    }
-    if (msg_id > 0 && msgctl(msg_id, IPC_RMID, NULL) == -1) {
-        fprintf(stderr, "Failed to clean up Message Queue! (%s)\n", strerror(errno));
-        exit(12);
-    }
-
-    return;
+    printf(" ]\nHead: %d | Tail: %d\n", magazine->head, magazine->tail);
 }
 
-void *sig_handler(int sig_num) {
+void signal_handler(int sig_num) {
     if (sig_num == SIGINT) {
-        write(1, "[Dyrektor][SIGNAL] Received SIGINT!\n", 38);
-        //        save_state();
-        clean_up(sem_id, shm_id, msg_id);
-        exit(0);
+        save_state();
+        send_log(msg_id, "TERMINATE");
+        clean_up();
     }
 
-    return NULL;
+    exit(0);
+}
+
+void clean_up() {
+    if (shm_id != -1)
+        shmctl(shm_id, IPC_RMID, NULL);
+    if (sem_id != -1)
+        semctl(sem_id, 0, IPC_RMID);
+    if (msg_id != -1)
+        msgctl(msg_id, IPC_RMID, NULL);
+
+    printf("\n[Director] IPC cleaned up.\n");
+}
+
+void save_state() {
+    // Save state
+    FILE *f = fopen("magazine.bin", "wb");
+    if (f) {
+        fwrite(magazine, sizeof(Magazine), 1, f);
+        fclose(f);
+    }
 }
