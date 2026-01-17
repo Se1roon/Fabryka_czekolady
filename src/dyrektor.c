@@ -16,6 +16,7 @@ void *handle_user_interface(void *child_processes);
 void print_status();
 void handle_help_command();
 
+void restore_state();
 void save_state();
 void clean_up();
 
@@ -68,6 +69,10 @@ int main() {
     }
 
     send_log(msg_id, "[Director] IPC Resources created!");
+
+    send_log(msg_id, "[Director] Restoring magazine state...");
+    restore_state();
+
     send_log(msg_id, "[Director] Spawning child processes...");
 
     pid_t logger_pid = fork();
@@ -250,6 +255,16 @@ void clean_up() {
         msgctl(msg_id, IPC_RMID, NULL);
 
     printf("\n[Director] IPC cleaned up.\n");
+}
+
+void restore_state() {
+    FILE *f = fopen("magazine.bin", "r");
+    if (f) {
+        fwrite(magazine, sizeof(Magazine), 1, f);
+        fclose(f);
+        send_log(msg_id, "[Director] Restored magazine state!");
+    } else
+        send_log(msg_id, "[Director] magazine.bin file not found. Nothing to restore from.");
 }
 
 void save_state() {
