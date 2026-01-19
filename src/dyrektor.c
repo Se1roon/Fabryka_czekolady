@@ -20,6 +20,9 @@ void restore_state();
 void save_state();
 void clean_up();
 
+// TODO: Make sure the permissions are minimal
+// TODO: Fix the problem when occasionally the magazine will fill with only three components
+//		 Maybe create a detecting logic that will temporarily stop deliveries when tail > head to create space
 
 int main() {
     if (signal(SIGINT, signal_handler) == SIG_ERR) {
@@ -132,8 +135,8 @@ int main() {
         return -1;
     }
 
-    // Wait for child processes to finish
-    for (int i = 0; i < 3; i++) {
+    // Wait for child processes to finish (except Logger - it needs to be still on)
+    for (int i = 0; i < 2; i++) {
         pid_t child_pid = child_processes[i];
 
         int status = -1;
@@ -181,9 +184,10 @@ void *handle_user_interface(void *child_processes) {
             if (strncmp(command, "help", 4) == 0) {
                 handle_help_command();
             } else if (strncmp(command, "quit", 4) == 0) {
+                send_log(msg_id, "[Director] Killing children :O");
                 kill(children[0], SIGINT);
                 kill(children[1], SIGINT);
-                kill(children[2], SIGINT);
+                // kill(children[2], SIGINT); Logger is terminated by sending "TERMINATE"
                 break;
             } else if (strncmp(command, "stats", 5) == 0) {
                 semop(sem_id, &lock, 1);
@@ -208,9 +212,10 @@ void *handle_user_interface(void *child_processes) {
             } else
                 handle_help_command();
         } else {
+            send_log(msg_id, "[Director] Killing children :O");
             kill(children[0], SIGINT);
             kill(children[1], SIGINT);
-            kill(children[2], SIGINT);
+            // kill(children[2], SIGINT);
             break; // Exit on CTRL+D or error
         }
     }
@@ -239,7 +244,8 @@ void print_status() {
 void signal_handler(int sig_num) {
     if (sig_num == SIGINT) {
         save_state();
-        send_log(msg_id, "TERMINATE");
+        send_log(msg_id, "[Director] Received SIGINT");
+        send_log(msg_id, "TERMINATE"); // Terminate logger process
         clean_up();
     }
 

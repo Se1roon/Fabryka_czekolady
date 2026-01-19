@@ -96,7 +96,7 @@ int main() {
             // UNLOCK
             semop(sem_id, &unlock, 1);
 
-            sched_yield();
+            // sched_yield();
         }
     }
 

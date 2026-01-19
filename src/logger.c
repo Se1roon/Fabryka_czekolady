@@ -1,17 +1,22 @@
 #include "../include/common.h"
 
 int main() {
-    key_t key = ftok(".", IPC_KEY_ID);
-    int msg_id = msgget(key, IPC_CREAT | 0600);
+    key_t ipc_key = ftok(".", IPC_KEY_ID);
+    if (ipc_key == -1) {
+        fprintf(stderr, "[Logger] Failed to create IPC key for IPC communication! (%s)\n", strerror(errno));
+        return -1;
+    }
+
+    int msg_id = msgget(ipc_key, IPC_CREAT | 0600);
     if (msg_id == -1) {
-        perror("Logger msgget");
-        return 1;
+        fprintf(stderr, "[Logger] Failed to join the Message Queue! (%s)\n", strerror(errno));
+        return -1;
     }
 
     FILE *f = fopen(LOG_FILE, "w");
     if (!f) {
-        perror("Logger fopen");
-        return 1;
+        fprintf(stderr, "[Logger] Failed to open %s file! (%s)\n", LOG_FILE, strerror(errno));
+        return -1;
     }
 
     printf("[Logger] Started. Writing to %s\n", LOG_FILE);
@@ -23,10 +28,9 @@ int main() {
         if (msgrcv(msg_id, &msg, sizeof(msg.text), MSG_LOG, 0) == -1) {
             if (errno == EINTR)
                 continue;
-            break; // Queue removed
+            break;
         }
 
-        // Check for Poison Pill
         if (strcmp(msg.text, "TERMINATE") == 0)
             break;
 
