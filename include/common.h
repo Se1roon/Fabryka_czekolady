@@ -20,42 +20,50 @@
 
 #define LOG_FILE "simulation.log"
 
-#define MAGAZINE_CAPACITY         1000
-#define SLOTS_LIMIT               (MAGAZINE_CAPACITY / 4)
-#define SMALL_COMPONENTS_TRESHOLD 20
+// Size of the components in bytes
+#define A_COMPONENT_SIZE 1
+#define B_COMPONENT_SIZE 1
+#define C_COMPONENT_SIZE 2
+#define D_COMPONENT_SIZE 3
 
-// Components size
-#define GET_SIZE(c) ((c) == 'C' ? 2 : ((c) == 'D' ? 3 : 1))
+// X: A + B + C
+// Y: A + B + D
+#define X_TYPE_SIZE (A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (C_COMPONENT_SIZE)
+#define Y_TYPE_SIZE (A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (D_COMPONENT_SIZE)
 
-// Maps 'A' -> 0, 'B' -> 1, ... in component_counts
-#define GET_TYPE_IDX(c) ((c) - 'A')
+// Change these
+#define X_TYPE_TO_PRODUCE 100
+#define Y_TYPE_TO_PRODUCE 80
+
+#define MAGAZINE_CAPACITY (X_TYPE_TO_PRODUCE) * (X_TYPE_SIZE) + (Y_TYPE_TO_PRODUCE) * (Y_TYPE_SIZE)
+
+#define COMPONENT_SPACE (MAGAZINE_CAPACITY) / ((A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (C_COMPONENT_SIZE) + (D_COMPONENT_SIZE))
+
+// IsA - index start A
+// IkA - index end A
+#define IsA 0
+#define IkA (COMPONENT_SPACE) - 1
+#define IsB (IkA) + 1
+#define IkB (IsB) + ((COMPONENT_SPACE) - 1)
+#define IsC (IkB) + 1
+#define IkC (IsC) + (2 * (COMPONENT_SPACE) - 1)
+#define IsD (IkC) + 1
+#define IkD (IsD) + (3 * (COMPONENT_SPACE) - 1)
+
 
 #define MSG_LOG 1
 
-// Ring Shared Memory - Magazyn
 typedef struct {
-    int head; // Read index		(Fabryka)
-    int tail; // Write index	(Dostawcy)
-    int current_usage;
+    char buffer[MAGAZINE_CAPACITY];
+
+    int A_count;
+    int B_count;
+    int C_count;
+    int D_count;
 
     int type1_produced;
     int type2_produced;
-
-    /* [0] -> A
-     * [1] -> B
-     * [2] -> C
-     * [3] -> D
-     */
-    int component_counts[4];
-
-    char buffer[MAGAZINE_CAPACITY];
 } Magazine;
-
-// Message Queue structs
-typedef struct {
-    long mtype;
-    int command;
-} CmdMsg;
 
 typedef struct {
     long mtype;

@@ -6,9 +6,11 @@
 static int msg_id = -1;
 static bool is_active = true;
 
+void get_component_indexes(char component_type, int *start_out, int *end_out);
+
 static void signal_handler(int sig_num);
 
-int main() {
+int main(int argc, char *argv[]) {
     if (signal(SIGINT, signal_handler) == SIG_ERR) {
         fprintf(stderr, "[Suppliers] Failed to assign signal handler to SIGINT! (%s)\n", strerror(errno));
         return -1;
@@ -18,6 +20,12 @@ int main() {
         return -1;
     }
 
+    if (argc != 2) {
+        fprintf(stderr, "[Supplier] Invalid arguments count!\n");
+        return -1;
+    }
+    // Handle incorrect number of arguments itp
+    char component = argv[1][0];
 
     key_t ipc_key = ftok(".", IPC_KEY_ID);
     if (ipc_key == -1) {
@@ -52,58 +60,57 @@ int main() {
     struct sembuf lock = {0, -1, 0};
     struct sembuf unlock = {0, 1, 0};
 
-    srand(time(NULL));
+    int start_index;
+    int end_index;
+    get_component_indexes(component, &start_index, &end_index);
 
-    send_log(msg_id, "[Suppliers] Starting deliveries!");
-
+    send_log(msg_id, "[Supplier: %c] Starting deliveries of %c!", component, component);
     while (1) {
-        if (is_active) {
-            // Randomly pick a product
-            int r = rand() % 4;
-            char item = 'A' + r;
-            int size = GET_SIZE(item);
-            int idx = GET_TYPE_IDX(item);
+        semop(sem_id, &lock, 1);
 
-            // LOCK
-            if (semop(sem_id, &lock, 1) == -1)
+        for (int i = start_index; i <= end_index; i++) {
+            if (magazine->buffer[i] == 0) {
+                magazine->buffer[i] = component;
+                send_log(msg_id, "[Supplier: %c] Delivered %c component!", component, component);
                 break;
-
-            int free_space = MAGAZINE_CAPACITY - magazine->current_usage;
-
-            bool keep_small_components = true;
-            if (size == 1 && free_space < SMALL_COMPONENTS_TRESHOLD)
-                keep_small_components = false;
-
-
-            bool slots_check = magazine->component_counts[idx] * size + size <= SLOTS_LIMIT;
-            bool space_check = free_space >= size;
-
-            // Check if there is space in the Ring
-            if (keep_small_components && slots_check && space_check) {
-                // Push to Ring (wrapping around)
-                for (int i = 0; i < size; i++) {
-                    magazine->buffer[magazine->tail] = item;
-                    magazine->tail = (magazine->tail + 1) % MAGAZINE_CAPACITY;
-                }
-                magazine->current_usage += size;
-                magazine->component_counts[idx]++;
-
-                // Log only occasionally to avoid spamming the file
-                if (rand() % 10 == 0)
-                    send_log(msg_id, "Supplier delivered %c (Size %d)", item, size);
             }
-
-            // UNLOCK
-            semop(sem_id, &unlock, 1);
-
-            // sched_yield();
         }
+
+        semop(sem_id, &unlock, 1);
     }
 
-    send_log(msg_id, "[Suppliers] Stopping.");
+    send_log(msg_id, "[Supplier: %c] Stopping.", component);
+
     shmdt(magazine);
 
     return 0;
+}
+
+void get_component_indexes(char component_type, int *start_out, int *end_out) {
+    if (component_type == 'A') {
+        *start_out = IsA;
+        *end_out = IkA;
+        return;
+    }
+    if (component_type == 'B') {
+        *start_out = IsB;
+        *end_out = IkB;
+        return;
+    }
+    if (component_type == 'C') {
+        *start_out = IsC;
+        *end_out = IkC;
+        return;
+    }
+    if (component_type == 'D') {
+        *start_out = IsD;
+        *end_out = IkD;
+        return;
+    }
+
+    *start_out = -1;
+    *end_out = -1;
+    return;
 }
 
 void signal_handler(int sig_num) {

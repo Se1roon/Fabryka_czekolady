@@ -13,7 +13,6 @@ static void signal_handler(int sig_num);
 
 void *handle_user_interface(void *child_processes);
 
-void print_status();
 void handle_help_command();
 
 void restore_state();
@@ -23,6 +22,18 @@ void clean_up();
 // TODO: Make sure the permissions are minimal
 // TODO: Fix the problem when occasionally the magazine will fill with only three components
 //		 Maybe create a detecting logic that will temporarily stop deliveries when tail > head to create space
+// TODO: Handle child termination on error (modify clean_up)
+
+// TODO: Każdy dostawca jako osobny proces
+// TODO: Magazyn podzilony sztywno na regiony A, B, C, D
+//		 Założyć ilość czekolady 1 i 2 do wyprodukowania
+//		 czekolada 1: A B C = 4 bajty
+//		 czekolada 2: A B D = 5 bajtow
+//		 wielkosc magazynu = ilosc cz1 * 4 + ilosc cz2 * 5
+//		 Ustalic trzeba indeksu od i do ktorych dostawcy daja swoje dane
+//		 I skad biora je fabryki
+// TODO: Test jak jednego dostawcy zabraknie
+// TODO: Przepelnienie kolejki z logami
 
 int main() {
     if (signal(SIGINT, signal_handler) == SIG_ERR) {
@@ -93,19 +104,27 @@ int main() {
         exit(1); // error if execl returned
     }
 
-    pid_t suppliers_pid = fork();
-    if (suppliers_pid == -1) {
-        fprintf(stderr, "[Director] Failed to create child process! (%s)\n", strerror(errno));
-        send_log(msg_id, "[Director] Failed to create child process! (%s)\n", strerror(errno));
-        clean_up();
-        return -1;
-    }
-    if (suppliers_pid == 0) {
-        execl("./bin/dostawcy", "./bin/dostawcy", NULL);
-        fprintf(stderr, "[Director] Failed to start Dostawcy process! (%s)\n", strerror(errno));
-        send_log(msg_id, "[Director] Failed to start Dostawcy process! (%s)\n", strerror(errno));
-        clean_up();
-        exit(1); // error if execl returned
+    pid_t suppliers[4];
+    int i = 0;
+    for (char component = 'A'; component < 'A' + 4; component++) {
+        pid_t supplier_pid = fork();
+        if (supplier_pid == -1) {
+            fprintf(stderr, "[Director] Failed to create child process! (%s)\n", strerror(errno));
+            send_log(msg_id, "[Director] Failed to create child process! (%s)\n", strerror(errno));
+            clean_up();
+            return -1;
+        }
+        if (supplier_pid == 0) {
+            char arg[2];
+            arg[0] = component;
+            arg[1] = 0;
+            execl("./bin/dostawcy", "./bin/dostawcy", arg, NULL);
+            fprintf(stderr, "[Director] Failed to start Supplier %c process! (%s)\n", component, strerror(errno));
+            send_log(msg_id, "[Director] Failed to start Supplier %c process! (%s)\n", component, strerror(errno));
+            clean_up();
+            exit(1); // error if execl returned
+        }
+        suppliers[i++] = supplier_pid;
     }
 
     pid_t factory_pid = fork();
@@ -123,7 +142,11 @@ int main() {
         exit(1);
     }
 
-    pid_t child_processes[3] = {suppliers_pid, factory_pid, logger_pid};
+    pid_t child_processes[6];
+    for (int i = 0; i < 4; i++)
+        child_processes[i] = suppliers[i];
+    child_processes[4] = factory_pid;
+    child_processes[5] = logger_pid;
 
     send_log(msg_id, "[Director] Spawned child processes!\n");
 
@@ -136,7 +159,7 @@ int main() {
     }
 
     // Wait for child processes to finish (except Logger - it needs to be still on)
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 5; i++) {
         pid_t child_pid = child_processes[i];
 
         int status = -1;
@@ -185,9 +208,8 @@ void *handle_user_interface(void *child_processes) {
                 handle_help_command();
             } else if (strncmp(command, "quit", 4) == 0) {
                 send_log(msg_id, "[Director] Killing children :O");
-                kill(children[0], SIGINT);
-                kill(children[1], SIGINT);
-                // kill(children[2], SIGINT); Logger is terminated by sending "TERMINATE"
+                for (int i = 0; i < 5; i++)
+                    kill(children[i], SIGINT);
                 break;
             } else if (strncmp(command, "stats", 5) == 0) {
                 semop(sem_id, &lock, 1);
@@ -198,7 +220,15 @@ void *handle_user_interface(void *child_processes) {
                 printf("Type1 chocolate produced: %d\n", magazine->type1_produced);
                 printf("Type2 chocolate produced: %d\n\n", magazine->type2_produced);
 
-                print_status();
+                printf("MAGAZINE:\n");
+                for (int i = 0; i < MAGAZINE_CAPACITY; i++) {
+                    if (i % 100 == 0)
+                        printf("\n");
+                    if (magazine->buffer[i] == 0)
+                        printf(".");
+                    else
+                        printf("%c", magazine->buffer[i]);
+                }
 
                 semop(sem_id, &unlock, 1);
             } else if (strncmp(command, "ts", 2) == 0) {
@@ -213,9 +243,8 @@ void *handle_user_interface(void *child_processes) {
                 handle_help_command();
         } else {
             send_log(msg_id, "[Director] Killing children :O");
-            kill(children[0], SIGINT);
-            kill(children[1], SIGINT);
-            // kill(children[2], SIGINT);
+            for (int i = 0; i < 5; i++)
+                kill(children[i], SIGINT);
             break; // Exit on CTRL+D or error
         }
     }
@@ -229,16 +258,6 @@ void handle_help_command() {
     printf("ts	  - Toggles the Suppliers (ON/OFF)\n");
     printf("tf	  - Toggles the Factory (ON/OFF)\n");
     printf("quit  - Quits\n\n");
-}
-
-void print_status() {
-    printf("\n--- MAGAZINE (Usage: %d/%d) ---\n[ ", magazine->current_usage, MAGAZINE_CAPACITY);
-    // Visualize ring buffer linearly
-    for (int i = 0; i < MAGAZINE_CAPACITY; i++) {
-        char c = magazine->buffer[i];
-        printf("%c", c ? c : '.');
-    }
-    printf(" ]\nHead: %d | Tail: %d\n", magazine->head, magazine->tail);
 }
 
 void signal_handler(int sig_num) {

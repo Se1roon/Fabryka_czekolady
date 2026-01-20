@@ -3,13 +3,6 @@
 
 #include "../include/common.h"
 
-typedef struct {
-    int has_A;
-    int has_B;
-    int has_C;
-    int has_D;
-} Inventory;
-
 static pid_t workers[2];
 static int msg_id = -1;
 static bool is_active = true;
@@ -110,93 +103,72 @@ void worker(int type, int shm_id, int sem_id, int msg_id) {
     struct sembuf lock = {0, -1, 0};
     struct sembuf unlock = {0, 1, 0};
 
-    Inventory inv = {0};
-    int produced = 0;
-
-    send_log(msg_id, "Worker %d started.", type);
+    send_log(msg_id, "[Worker] Worker %d started.", type);
 
     while (1) {
         if (is_active) {
             semop(sem_id, &lock, 1);
 
-            if (magazine->current_usage > 0) {
-                // Peek at the Head of the Ring
-                char item = magazine->buffer[magazine->head];
-                int size = GET_SIZE(item);
-                int idx = GET_TYPE_IDX(item);
-                bool needed = false;
+            bool found_A = false;
+            bool found_B = false;
 
-                // Decision: Do I need this item?
-                if (item == 'A' && !inv.has_A)
-                    needed = true;
-                else if (item == 'B' && !inv.has_B)
-                    needed = true;
-                else if (type == 1 && item == 'C' && !inv.has_C)
-                    needed = true;
-                else if (type == 2 && item == 'D' && !inv.has_D)
-                    needed = true;
-
-                if (needed) {
-                    // CONSUME: Take from Head
-                    magazine->head = (magazine->head + size) % MAGAZINE_CAPACITY;
-                    magazine->current_usage -= size;
-                    magazine->component_counts[idx]--;
-
-                    if (item == 'A')
-                        inv.has_A = 1;
-                    if (item == 'B')
-                        inv.has_B = 1;
-                    if (item == 'C')
-                        inv.has_C = 1;
-                    if (item == 'D')
-                        inv.has_D = 1;
-                } else {
-                    int slots_occupied = magazine->component_counts[idx] * size;
-                    bool is_clogged = magazine->current_usage >= MAGAZINE_CAPACITY - 10;
-                    bool oversupply = slots_occupied > SLOTS_LIMIT;
-
-                    if (is_clogged || oversupply) {
-                        // Remove the component
-                        magazine->head = (magazine->head + size) % MAGAZINE_CAPACITY;
-                        magazine->current_usage -= size;
-                        magazine->component_counts[idx]--;
-                    } else {
-                        // RECYCLE: Move from Head to Tail (Rotate Ring)
-                        for (int k = 0; k < size; k++) {
-                            char val = magazine->buffer[(magazine->head + k) % MAGAZINE_CAPACITY];
-                            magazine->buffer[(magazine->tail + k) % MAGAZINE_CAPACITY] = val;
-                        }
-                        magazine->head = (magazine->head + size) % MAGAZINE_CAPACITY;
-                        magazine->tail = (magazine->tail + size) % MAGAZINE_CAPACITY;
-                    }
+            // Look for A
+            for (int i = IsA; i <= IkA; i++) {
+                if (magazine->buffer[i] == 'A') {
+                    found_A = true;
+                    magazine->buffer[i] = 0;
+                    break;
+                }
+            }
+            // Look for B
+            for (int i = IsB; i <= IkB; i++) {
+                if (magazine->buffer[i] == 'B') {
+                    found_B = true;
+                    magazine->buffer[i] = 0;
+                    break;
                 }
             }
 
-            // Check Recipe
-            if (type == 1 && inv.has_A && inv.has_B && inv.has_C) {
-                produced++;
-                magazine->type1_produced++;
-                inv.has_A = 0;
-                inv.has_B = 0;
-                inv.has_C = 0;
-                send_log(msg_id, "[Factory] Worker 1 PRODUCED Chocolate (Total: %d)", produced);
-            }
-            if (type == 2 && inv.has_A && inv.has_B && inv.has_D) {
-                produced++;
-                magazine->type2_produced++;
-                inv.has_A = 0;
-                inv.has_B = 0;
-                inv.has_D = 0;
-                send_log(msg_id, "[Factory] Worker 2 PRODUCED Chocolate (Total: %d)", produced);
+            // Type X of chocolate
+            if (type == 1) {
+                bool found_C = false;
+                // Look for C
+                for (int i = IsC; i <= IkC; i++) {
+                    if (magazine->buffer[i] == 'C') {
+                        found_C = true;
+                        magazine->buffer[i] = 0;
+                        break;
+                    }
+                }
+                if (found_A && found_B && found_C) {
+                    magazine->type1_produced++;
+                    send_log(msg_id, "[Worker] PRODUCED chocolate type X!");
+                } else
+                    send_log(msg_id, "[Worker] Not enough components for type X!");
+            } else if (type == 2) {
+                bool found_D = false;
+                // Look for D
+                for (int i = IsD; i <= IkD; i++) {
+                    if (magazine->buffer[i] == 'D') {
+                        found_D = true;
+                        magazine->buffer[i] = 0;
+                        break;
+                    }
+                }
+
+                if (found_A && found_B && found_D) {
+                    magazine->type2_produced++;
+                    send_log(msg_id, "[Worker] PRODUCED chocolate type Y!");
+                } else
+                    send_log(msg_id, "[Worker] Not enough components for type Y!");
             }
 
             semop(sem_id, &unlock, 1);
 
-            sched_yield();
+            // usleep(5000);
         }
     }
 
-    send_log(msg_id, "[Factory] Worker %d stopped. Total produced: %d", type, produced);
     shmdt(magazine);
     exit(0);
 }
