@@ -32,8 +32,8 @@
 #define Y_TYPE_SIZE (A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (D_COMPONENT_SIZE)
 
 // Change these
-#define X_TYPE_TO_PRODUCE 5000000
-#define Y_TYPE_TO_PRODUCE 400
+#define X_TYPE_TO_PRODUCE 100000
+#define Y_TYPE_TO_PRODUCE 8000
 
 #define MAGAZINE_CAPACITY (X_TYPE_TO_PRODUCE) * (X_TYPE_SIZE) + (Y_TYPE_TO_PRODUCE) * (Y_TYPE_SIZE)
 
@@ -61,6 +61,7 @@
 typedef struct {
     char buffer[MAGAZINE_CAPACITY];
 
+    // Maybe use it for optimization
     int A_count;
     int B_count;
     int C_count;
@@ -90,7 +91,6 @@ static void send_log(int msg_id, const char *fmt, ...) {
     vsnprintf(msg.text, sizeof(msg.text), fmt, args);
     va_end(args);
 
-    // Use IPC_NOWAIT so workers don't freeze if logger is slow
     msgsnd(msg_id, &msg, sizeof(msg.text), 0);
 }
 

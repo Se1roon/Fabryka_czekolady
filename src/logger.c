@@ -10,25 +10,25 @@ void signal_handler(int sig_num);
 
 int main() {
     if (signal(SIGINT, signal_handler) == SIG_ERR) {
-        fprintf(stderr, "[Logger] Failed to assign signal handler to SIGINT! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Logger] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
 
     key_t ipc_key = ftok(".", IPC_KEY_ID);
     if (ipc_key == -1) {
-        fprintf(stderr, "[Logger] Failed to create IPC key for IPC communication! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Logger] Failed to create key for IPC communication! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
 
     int msg_id = msgget(ipc_key, IPC_CREAT | 0600);
     if (msg_id == -1) {
-        fprintf(stderr, "[Logger] Failed to join the Message Queue! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Logger] Failed to join the Message Queue! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
 
     FILE *f = fopen(LOG_FILE, "w");
     if (!f) {
-        fprintf(stderr, "[Logger] Failed to open %s file! (%s)\n", LOG_FILE, strerror(errno));
+        fprintf(stderr, "%s[Logger] Failed to open %s file! (%s)%s\n", ERROR_CLR_SET, LOG_FILE, strerror(errno), CLR_RST);
         return -1;
     }
 

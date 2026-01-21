@@ -9,83 +9,97 @@ static int sem_id = -1;
 static int msg_id = -1;
 static Magazine *magazine;
 
-static pid_t child_processes[6];
+static pid_t child_processes[7];
 
 static bool workerX_active = true;
 static bool workerY_active = true;
 
 static void signal_handler(int sig_num);
+void *manage_processes(void *arg);
 
 void restore_state();
 void save_state();
 void clean_up_IPC();
-void clean_up_CHILD(pid_t *child_processes, int count, bool force);
+void clean_up_CHILDREN(pid_t *child_processes, int count, bool force);
 
-// TODO: Logowanie na stdout (tee ?)
-// TODO: Koloryzowanie logow
-
-// TODO:
 
 int main() {
     if (signal(SIGINT, signal_handler) == SIG_ERR) {
-        fprintf(stderr, "[Director] Failed to assign signal handler to SIGINT! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
     if (signal(SIGUSR1, signal_handler) == SIG_ERR) {
-        fprintf(stderr, "[Director] Failed to assign signal handler to SIGUSR1! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGUSR1! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
     if (signal(SIGUSR2, signal_handler) == SIG_ERR) {
-        fprintf(stderr, "[Director] Failed to assign signal handler to SIGUSR2! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGUSR2! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
 
     key_t ipc_key = ftok(".", IPC_KEY_ID);
     if (ipc_key == -1) {
-        fprintf(stderr, "[Director] Failed to create key for IPC communication! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to create key for IPC communication! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
 
     shm_id = shmget(ipc_key, sizeof(Magazine), IPC_CREAT | IPC_EXCL | 0600);
     if (shm_id == -1) {
-        fprintf(stderr, "[Director] Failed to create Shared Memory segment! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to create Shared Memory segment! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
 
     magazine = (Magazine *)shmat(shm_id, NULL, 0);
     if (magazine == (void *)-1) {
-        fprintf(stderr, "[Director] Failed to attach to Shared Memory segment! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to attach to Shared Memory segment! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         clean_up_IPC();
         return -1;
     }
 
     sem_id = semget(ipc_key, 1, IPC_CREAT | IPC_EXCL | 0600);
     if (sem_id == -1) {
-        fprintf(stderr, "[Director] Failed to create Semaphore Set! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to create Semaphore Set! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         clean_up_IPC();
         return -1;
     }
 
+    // Initialize Semaphore to 1
     union semun arg;
     arg.val = 1;
     if (semctl(sem_id, 0, SETVAL, arg) == -1) {
-        fprintf(stderr, "[Director] Failed to initialize Semaphore! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to initialize Semaphore! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         clean_up_IPC();
         return -1;
     }
 
     msg_id = msgget(ipc_key, IPC_CREAT | IPC_EXCL | 0600);
     if (msg_id == -1) {
-        fprintf(stderr, "[Director] Failed to create Message Queue! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to create Message Queue! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         clean_up_IPC();
         return -1;
     }
 
     send_log(msg_id, "%s[Director] IPC Resources created!%s", INFO_CLR_SET, CLR_RST);
+
     send_log(msg_id, "%s[Director] Restoring magazine state...%s", INFO_CLR_SET, CLR_RST);
     restore_state();
+    magazine->type1_produced = 0;
+    magazine->type2_produced = 0;
+
+    send_log(msg_id, "%s[Director] Creating thread for managing processes...%s", INFO_CLR_SET, CLR_RST);
+
+    pthread_t process_manager;
+    if ((errno = pthread_create(&process_manager, NULL, manage_processes, NULL)) != 0) {
+        send_log(msg_id, "%s[Director] Failed to create thread for process management! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        clean_up_IPC();
+        return -1;
+    }
+
+    send_log(msg_id, "%s[Director] Process Management thread launched successfully!%s", INFO_CLR_SET, CLR_RST);
+
     send_log(msg_id, "%s[Director] Spawning child processes...%s", INFO_CLR_SET, CLR_RST);
 
+    // Creating Logger process
     pid_t logger_pid = fork();
     if (logger_pid == -1) {
         send_log(msg_id, "%s[Director] Failed to create child process! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
@@ -99,15 +113,16 @@ int main() {
         return -1;
     }
 
-    int i = 0;
-    child_processes[i++] = logger_pid;
+    int children_count = 0;
+    child_processes[children_count++] = logger_pid;
 
+    // Creating Supplier processes
     for (char component = 'A'; component < 'A' + 4; component++) {
         pid_t supplier_pid = fork();
         if (supplier_pid == -1) {
             send_log(msg_id, "%s[Director] Failed to create child process! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
 
-            clean_up_CHILD(child_processes, i, true);
+            clean_up_CHILDREN(child_processes, children_count, true);
             clean_up_IPC();
             return -1;
         }
@@ -118,34 +133,49 @@ int main() {
             execl("./bin/dostawcy", "./bin/dostawcy", arg, NULL);
             send_log(msg_id, "%s[Director] Failed to start Supplier %c process! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
 
-            clean_up_CHILD(child_processes, i, true);
+            clean_up_CHILDREN(child_processes, children_count, true);
             clean_up_IPC();
             exit(1);
         }
-        child_processes[i++] = supplier_pid;
+        child_processes[children_count++] = supplier_pid;
     }
 
-    pid_t factory_pid = fork();
-    if (factory_pid == -1) {
-        send_log(msg_id, "%s[Director] Failed to create child process! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+    // Creating Worker processes
+    for (char worker_type = 'X'; worker_type <= 'Y'; worker_type++) {
+        pid_t worker_pid = fork();
+        if (worker_pid == -1) {
+            send_log(msg_id, "%s[Director] Failed to create child process! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
 
-        clean_up_CHILD(child_processes, i, true);
+            clean_up_CHILDREN(child_processes, children_count, true);
+            clean_up_IPC();
+            return -1;
+        }
+        if (worker_pid == 0) {
+            char arg[2];
+            arg[0] = worker_type;
+            arg[1] = 0;
+            execl("./bin/fabryka", "./bin/fabryka", arg, NULL);
+            send_log(msg_id, "%s[Director] Failed to start Worker %c process! (%s)%s", ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
+
+            clean_up_CHILDREN(child_processes, children_count, true);
+            clean_up_IPC();
+            exit(1);
+        }
+        child_processes[children_count++] = worker_pid;
+    }
+
+    send_log(msg_id, "%s[Director] Spawned child processes!%s", INFO_CLR_SET, CLR_RST);
+
+    send_log(msg_id, "%s[Director] Waiting for Factory to finish work!%s", INFO_CLR_SET, CLR_RST);
+
+    if ((errno = pthread_join(process_manager, NULL)) != 0) {
+        send_log(msg_id, "%s[Director] Failed to wait for child processes! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        clean_up_CHILDREN(child_processes, children_count, true);
         clean_up_IPC();
         return -1;
     }
-    if (factory_pid == 0) {
-        execl("./bin/fabryka", "./bin/fabryka", NULL);
-        send_log(msg_id, "%s[Director] Failed to start Factory process! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
 
-        clean_up_CHILD(child_processes, i, true);
-        clean_up_IPC();
-        exit(1);
-    }
-    child_processes[i++] = factory_pid;
-
-    send_log(msg_id, "%s[Director] Spawned child processes!%s\n", INFO_CLR_SET, CLR_RST);
-
-    clean_up_CHILD(child_processes, i, false);
+    send_log(msg_id, "%s[Director] FACTORY FINISHED WORK!%s", INFO_CLR_SET, CLR_RST);
 
     save_state();
 
@@ -153,10 +183,10 @@ int main() {
 
     int status = -1;
     if (waitpid(logger_pid, &status, 0) < 0)
-        fprintf(stderr, "[Director] Failed to wait for Logger termination! (%s)\n", strerror(errno));
+        fprintf(stderr, "%s[Director] Failed to wait for Logger termination! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
 
     if (WIFEXITED(status))
-        fprintf(stderr, "[Director] Child process %d has terminated (code %d)\n", logger_pid, WEXITSTATUS(status));
+        fprintf(stderr, "%s[Director] Child process %d has terminated (code %d)%s\n", INFO_CLR_SET, logger_pid, WEXITSTATUS(status), CLR_RST);
 
     clean_up_IPC();
     return 0;
@@ -166,30 +196,30 @@ void signal_handler(int sig_num) {
     if (sig_num == SIGINT) {
         save_state();
         send_log(msg_id, "%s[Director] Received SIGINT%s", INFO_CLR_SET, CLR_RST);
-        clean_up_CHILD(child_processes, 6, true);
+        clean_up_CHILDREN(child_processes, 7, true);
         clean_up_IPC();
         exit(0);
     } else if (sig_num == SIGUSR1) {
         // X Production is done
         if (!workerY_active) {
             send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[1], SIGINT); // Terminate A supplier
+            kill(child_processes[1], SIGINT);
             send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[2], SIGINT); // B
+            kill(child_processes[2], SIGINT);
         }
         send_log(msg_id, "%s[Director] Stopping C deliveries!%s", WARNING_CLR_SET, CLR_RST);
-        kill(child_processes[3], SIGINT); // C
+        kill(child_processes[3], SIGINT);
         workerX_active = false;
     } else if (sig_num == SIGUSR2) {
         // Y production is done
         if (!workerX_active) {
             send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[1], SIGINT); // Terminate A supplier
+            kill(child_processes[1], SIGINT);
             send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[2], SIGINT); // B
+            kill(child_processes[2], SIGINT);
         }
         send_log(msg_id, "%s[Director] Stopping D deliveries!%s", WARNING_CLR_SET, CLR_RST);
-        kill(child_processes[4], SIGINT); // 4
+        kill(child_processes[4], SIGINT);
         workerY_active = false;
     }
 }
@@ -205,13 +235,13 @@ void clean_up_IPC() {
     printf("\n%s[Director] IPC cleaned up.%s\n", INFO_CLR_SET, CLR_RST);
 }
 
-void clean_up_CHILD(pid_t *child_processes, int count, bool force) {
-    int end = 1;
+void clean_up_CHILDREN(pid_t *child_processes, int count, bool force) {
+    int end = 1; // Don't want to wait for Logger termination when not forced.
 
     if (force) {
         for (int i = count - 1; i >= 0; i--)
             kill(child_processes[i], SIGINT);
-        end = 0; // Don't want to wait for logger termination when not forced.
+        end = 0;
     }
 
     for (int i = count - 1; i >= end; i--) {
@@ -244,4 +274,18 @@ void save_state() {
         send_log(msg_id, "%s[Director] Saved magazine state!%s", INFO_CLR_SET, CLR_RST);
         fclose(f);
     }
+}
+
+void *manage_processes(void *arg) {
+    int p_status;
+    pid_t p_pid;
+    int collected = 0;
+    while (collected < 6) { // Doesn't wait for logger
+        if ((p_pid = waitpid(-1, &p_status, WNOHANG)) > 0) {
+            send_log(msg_id, "%s[Process Manager] Successfully collected process %d (exit code %d)!%s", INFO_CLR_SET, p_pid, p_status, CLR_RST);
+            collected++;
+        }
+    }
+
+    return NULL;
 }

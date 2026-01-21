@@ -4,9 +4,9 @@
 #include "../include/common.h"
 
 static int msg_id = -1;
-static bool is_active = true;
-
 static Magazine *magazine = NULL;
+
+static bool is_active = true;
 
 void get_component_indexes(char component_type, int *start_out, int *end_out);
 
@@ -14,7 +14,7 @@ static void signal_handler(int sig_num);
 
 int main(int argc, char *argv[]) {
     if (signal(SIGINT, signal_handler) == SIG_ERR) {
-        fprintf(stderr, "%s[Suppliers] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        fprintf(stderr, "%s[Supplier] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
 
@@ -27,31 +27,31 @@ int main(int argc, char *argv[]) {
 
     key_t ipc_key = ftok(".", IPC_KEY_ID);
     if (ipc_key == -1) {
-        fprintf(stderr, "%s[Suppliers] Failed to create key for IPC communication! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        fprintf(stderr, "%s[Supplier: %c] Failed to create key for IPC communication! (%s)%s\n", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
         return -1;
     }
 
     int shm_id = shmget(ipc_key, sizeof(Magazine), IPC_CREAT | 0600);
     if (shm_id == -1) {
-        fprintf(stderr, "%s[Suppliers] Failed to join the Shared Memory segment! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        fprintf(stderr, "%s[Supplier: %c] Failed to join the Shared Memory segment! (%s)%s\n", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
         return -1;
     }
 
     int sem_id = semget(ipc_key, 1, IPC_CREAT | 0600);
     if (sem_id == -1) {
-        fprintf(stderr, "%s[Suppliers] Failed to join the Semaphore Set! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        fprintf(stderr, "%s[Supplier: %c] Failed to join the Semaphore Set! (%s)%s\n", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
         return -1;
     }
 
     msg_id = msgget(ipc_key, IPC_CREAT | 0600);
     if (msg_id == -1) {
-        fprintf(stderr, "%s[Suppliers] Failed to join the Message Queue! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        fprintf(stderr, "%s[Supplier: %c] Failed to join the Message Queue! (%s)%s\n", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
         return -1;
     }
 
     magazine = (Magazine *)shmat(shm_id, NULL, 0);
     if (magazine == (void *)-1) {
-        fprintf(stderr, "%s[Suppliers] Failed to attach to Shared Memory segment! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        fprintf(stderr, "%s[Supplier: %c] Failed to attach to Shared Memory segment! (%s)%s\n", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
         return -1;
     }
 
@@ -63,8 +63,14 @@ int main(int argc, char *argv[]) {
     get_component_indexes(component, &start_index, &end_index);
 
     send_log(msg_id, "%s[Supplier: %c] Starting deliveries of %c!%s", INFO_CLR_SET, component, component, CLR_RST);
+
     while (is_active) {
-        semop(sem_id, &lock, 1);
+        while (semop(sem_id, &lock, 1) == -1) {
+            if (errno != EINTR) {
+                send_log(msg_id, "%s[Supplier: %c] Unable to perform semaphore WAIT operation! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
+                exit(-1);
+            }
+        }
 
         for (int i = start_index; i <= end_index; i++) {
             if (magazine->buffer[i] == 0) {
@@ -74,12 +80,17 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        semop(sem_id, &unlock, 1);
+        while (semop(sem_id, &unlock, 1) == -1) {
+            if (errno != EINTR) {
+                send_log(msg_id, "%s[Supplier: %c] Unable to perform semaphore RELEASE operation! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
+                exit(-1);
+            }
+        }
 
         sched_yield();
     }
 
-    send_log(msg_id, "%s[Supplier: %c] Stopping%s", INFO_CLR_SET, component, CLR_RST);
+    send_log(msg_id, "%s[Supplier: %c] Terminating%s", INFO_CLR_SET, component, CLR_RST);
 
     shmdt(magazine);
 
@@ -115,7 +126,7 @@ void get_component_indexes(char component_type, int *start_out, int *end_out) {
 
 void signal_handler(int sig_num) {
     if (sig_num == SIGINT) {
-        send_log(msg_id, "%s[Suppliers] Received SIGINT%s", INFO_CLR_SET, CLR_RST);
+        send_log(msg_id, "%s[Supplier] Received SIGINT%s", INFO_CLR_SET, CLR_RST);
         is_active = false;
     }
 }
