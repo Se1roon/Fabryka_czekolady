@@ -1,19 +1,19 @@
 CC = clang
 CFLAGS = -Wall -Wextra
 
-run: bin/dyrektor bin/logger bin/dostawcy bin/fabryka
+run: bin/dyrektor bin/logger bin/dostawcy bin/fabryka 
 
-bin/logger: src/logger.c
-	$(CC) $^ -o $@ $(CFLAGS)
+bin/logger: src/logger.c include/common.h
+	$(CC) src/logger.c -o $@ $(CFLAGS)
 
-bin/dostawcy: src/dostawcy.c
-	$(CC) $^ -o $@ $(CFLAGS)
+bin/dostawcy: src/dostawcy.c include/common.h
+	$(CC) src/dostawcy.c -o $@ $(CFLAGS)
 
-bin/fabryka: src/fabryka.c
-	$(CC) $^ -o $@ $(CFLAGS)
+bin/fabryka: src/fabryka.c include/common.h
+	$(CC) src/fabryka.c -o $@ $(CFLAGS)
 
-bin/dyrektor: src/dyrektor.c
-	$(CC) $^ -o $@ $(CFLAGS)
+bin/dyrektor: src/dyrektor.c include/common.h
+	$(CC) src/dyrektor.c -o $@ $(CFLAGS)
 
 directories:
 	mkdir bin

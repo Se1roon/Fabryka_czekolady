@@ -32,8 +32,8 @@
 #define Y_TYPE_SIZE (A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (D_COMPONENT_SIZE)
 
 // Change these
-#define X_TYPE_TO_PRODUCE 100
-#define Y_TYPE_TO_PRODUCE 80
+#define X_TYPE_TO_PRODUCE 5000000
+#define Y_TYPE_TO_PRODUCE 400
 
 #define MAGAZINE_CAPACITY (X_TYPE_TO_PRODUCE) * (X_TYPE_SIZE) + (Y_TYPE_TO_PRODUCE) * (Y_TYPE_SIZE)
 
@@ -50,6 +50,11 @@
 #define IsD (IkC) + 1
 #define IkD (IsD) + (3 * (COMPONENT_SPACE) - 1)
 
+// Colors
+#define ERROR_CLR_SET   "\x1b[31m"
+#define INFO_CLR_SET    "\x1b[32m"
+#define WARNING_CLR_SET "\x1b[33m"
+#define CLR_RST         "\x1b[0m"
 
 #define MSG_LOG 1
 
@@ -86,7 +91,7 @@ static void send_log(int msg_id, const char *fmt, ...) {
     va_end(args);
 
     // Use IPC_NOWAIT so workers don't freeze if logger is slow
-    msgsnd(msg_id, &msg, sizeof(msg.text), IPC_NOWAIT);
+    msgsnd(msg_id, &msg, sizeof(msg.text), 0);
 }
 
 #endif
