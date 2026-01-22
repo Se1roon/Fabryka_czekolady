@@ -3,13 +3,23 @@
 #include "../include/common.h"
 
 static bool terminated = false;
+static FILE *f;
 
 void log_msg(FILE *f, LogMsg *msg);
 
-void signal_handler(int sig_num);
+static void signal_handler(int sig_num, siginfo_t *sig_info, void *data);
 
 int main() {
-    if (signal(SIGINT, signal_handler) == SIG_ERR) {
+    struct sigaction sa;
+    sa.sa_sigaction = signal_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        fprintf(stderr, "%s[Logger] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        return -1;
+    }
+    if (sigaction(SIGTERM, &sa, NULL) == -1) {
         fprintf(stderr, "%s[Logger] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
@@ -26,7 +36,7 @@ int main() {
         return -1;
     }
 
-    FILE *f = fopen(LOG_FILE, "w");
+    f = fopen(LOG_FILE, "w");
     if (!f) {
         fprintf(stderr, "%s[Logger] Failed to open %s file! (%s)%s\n", ERROR_CLR_SET, LOG_FILE, strerror(errno), CLR_RST);
         return -1;
@@ -77,6 +87,12 @@ void log_msg(FILE *f, LogMsg *msg) {
     fflush(stdout);
 }
 
-void signal_handler(int sig_num) {
-    terminated = true;
+void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
+    if (sig_num == SIGINT)
+        terminated = true;
+    else if (sig_num == SIGTERM) {
+        if (getppid() != sig_info->si_pid) {
+            kill(getppid(), SIGUSR2);
+        }
+    }
 }

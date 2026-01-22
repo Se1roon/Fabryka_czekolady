@@ -10,13 +10,23 @@ static bool is_active = true;
 
 void get_component_indexes(char component_type, int *start_out, int *end_out);
 
-static void signal_handler(int sig_num);
+static void signal_handler(int sig_num, siginfo_t *sig_info, void *data);
 
 int main(int argc, char *argv[]) {
-    if (signal(SIGINT, signal_handler) == SIG_ERR) {
+    struct sigaction sa;
+    sa.sa_sigaction = signal_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
         fprintf(stderr, "%s[Supplier] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
+    if (sigaction(SIGTERM, &sa, NULL) == -1) {
+        fprintf(stderr, "%s[Supplier] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        return -1;
+    }
+
 
     if (argc != 2) {
         fprintf(stderr, "%s[Supplier] Invalid arguments count!%s\n", ERROR_CLR_SET, CLR_RST);
@@ -124,9 +134,14 @@ void get_component_indexes(char component_type, int *start_out, int *end_out) {
     return;
 }
 
-void signal_handler(int sig_num) {
+void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
     if (sig_num == SIGINT) {
         send_log(msg_id, "%s[Supplier] Received SIGINT%s", INFO_CLR_SET, CLR_RST);
         is_active = false;
+    } else if (sig_num == SIGTERM) {
+        if (getppid() != sig_info->si_pid) {
+            send_log(msg_id, "%s[Supplier] Something weird is happening... Notifying Director%s", ERROR_CLR_SET, CLR_RST);
+            kill(getppid(), SIGUSR2);
+        }
     }
 }

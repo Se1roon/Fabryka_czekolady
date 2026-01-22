@@ -9,12 +9,13 @@ static int sem_id = -1;
 static int msg_id = -1;
 static Magazine *magazine;
 
+static pthread_t process_manager;
 static pid_t child_processes[7];
 
 static bool workerX_active = true;
 static bool workerY_active = true;
 
-static void signal_handler(int sig_num);
+static void signal_handler(int sig_num, siginfo_t *sig_info, void *data);
 void *manage_processes(void *arg);
 
 void restore_state();
@@ -24,15 +25,20 @@ void clean_up_CHILDREN(pid_t *child_processes, int count, bool force);
 
 
 int main() {
-    if (signal(SIGINT, signal_handler) == SIG_ERR) {
+    struct sigaction sa;
+    sa.sa_sigaction = signal_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
         fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
-    if (signal(SIGUSR1, signal_handler) == SIG_ERR) {
+    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
         fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGUSR1! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
-    if (signal(SIGUSR2, signal_handler) == SIG_ERR) {
+    if (sigaction(SIGUSR2, &sa, NULL) == -1) {
         fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGUSR2! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
@@ -83,12 +89,11 @@ int main() {
 
     send_log(msg_id, "%s[Director] Restoring magazine state...%s", INFO_CLR_SET, CLR_RST);
     restore_state();
-    magazine->type1_produced = 0;
-    magazine->type2_produced = 0;
+    magazine->typeX_produced = 0;
+    magazine->typeY_produced = 0;
 
     send_log(msg_id, "%s[Director] Creating thread for managing processes...%s", INFO_CLR_SET, CLR_RST);
 
-    pthread_t process_manager;
     if ((errno = pthread_create(&process_manager, NULL, manage_processes, NULL)) != 0) {
         send_log(msg_id, "%s[Director] Failed to create thread for process management! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
         clean_up_IPC();
@@ -130,7 +135,7 @@ int main() {
             char arg[2];
             arg[0] = component;
             arg[1] = 0;
-            execl("./bin/dostawcy", "./bin/dostawcy", arg, NULL);
+            execl("./bin/dostawca", "./bin/dostawca", arg, NULL);
             send_log(msg_id, "%s[Director] Failed to start Supplier %c process! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
 
             clean_up_CHILDREN(child_processes, children_count, true);
@@ -154,7 +159,7 @@ int main() {
             char arg[2];
             arg[0] = worker_type;
             arg[1] = 0;
-            execl("./bin/fabryka", "./bin/fabryka", arg, NULL);
+            execl("./bin/pracownik", "./bin/pracownik", arg, NULL);
             send_log(msg_id, "%s[Director] Failed to start Worker %c process! (%s)%s", ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
 
             clean_up_CHILDREN(child_processes, children_count, true);
@@ -192,7 +197,7 @@ int main() {
     return 0;
 }
 
-void signal_handler(int sig_num) {
+void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
     if (sig_num == SIGINT) {
         save_state();
         send_log(msg_id, "%s[Director] Received SIGINT%s", INFO_CLR_SET, CLR_RST);
@@ -200,27 +205,34 @@ void signal_handler(int sig_num) {
         clean_up_IPC();
         exit(0);
     } else if (sig_num == SIGUSR1) {
-        // X Production is done
-        if (!workerY_active) {
-            send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[1], SIGINT);
-            send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[2], SIGINT);
+        if (sig_info->si_pid == child_processes[5]) {
+            // source is Worker X -> X Production is done
+            if (!workerY_active) {
+                send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
+                kill(child_processes[1], SIGINT);
+                send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
+                kill(child_processes[2], SIGINT);
+            }
+            send_log(msg_id, "%s[Director] Stopping C deliveries!%s", WARNING_CLR_SET, CLR_RST);
+            kill(child_processes[3], SIGINT);
+            workerX_active = false;
+        } else if (sig_info->si_pid == child_processes[6]) {
+            // source is Worker Y -> Y Production is done
+            if (!workerX_active) {
+                send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
+                kill(child_processes[1], SIGINT);
+                send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
+                kill(child_processes[2], SIGINT);
+            }
+            send_log(msg_id, "%s[Director] Stopping D deliveries!%s", WARNING_CLR_SET, CLR_RST);
+            kill(child_processes[4], SIGINT);
+            workerY_active = false;
         }
-        send_log(msg_id, "%s[Director] Stopping C deliveries!%s", WARNING_CLR_SET, CLR_RST);
-        kill(child_processes[3], SIGINT);
-        workerX_active = false;
     } else if (sig_num == SIGUSR2) {
-        // Y production is done
-        if (!workerX_active) {
-            send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[1], SIGINT);
-            send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[2], SIGINT);
-        }
-        send_log(msg_id, "%s[Director] Stopping D deliveries!%s", WARNING_CLR_SET, CLR_RST);
-        kill(child_processes[4], SIGINT);
-        workerY_active = false;
+        send_log(msg_id, "%s[Director] Received SIGUSR2... A terrorist attack detected!%s", ERROR_CLR_SET, CLR_RST);
+        clean_up_CHILDREN(child_processes, 7, true);
+        clean_up_IPC();
+        exit(0);
     }
 }
 
@@ -236,23 +248,43 @@ void clean_up_IPC() {
 }
 
 void clean_up_CHILDREN(pid_t *child_processes, int count, bool force) {
-    int end = 1; // Don't want to wait for Logger termination when not forced.
-
     if (force) {
-        for (int i = count - 1; i >= 0; i--)
+        pthread_cancel(process_manager);
+        pthread_join(process_manager, NULL);
+
+        for (int i = count - 1; i >= 1; i--) {
+            if (child_processes[i] == 0)
+                continue;
             kill(child_processes[i], SIGINT);
-        end = 0;
+        }
     }
 
-    for (int i = count - 1; i >= end; i--) {
+    for (int i = count - 1; i >= 1; i--) {
         pid_t child_pid = child_processes[i];
+        if (child_pid == 0)
+            continue;
 
         int status = -1;
-        if (waitpid(child_pid, &status, 0) < 0)
-            send_log(msg_id, "%s[Director] Failed to wait for child termination! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
-
-        if (WIFEXITED(status))
+        if (waitpid(child_pid, &status, 0) < 0) {
+            if (errno != ECHILD)
+                send_log(msg_id, "%s[Director] Failed to wait for child termination! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        } else if (WIFEXITED(status))
             send_log(msg_id, "%s[Director] Child process %d has terminated (code %d)%s", ERROR_CLR_SET, child_pid, WEXITSTATUS(status), CLR_RST);
+
+        child_processes[i] = 0;
+    }
+
+    if (force)
+        if (child_processes[0] != 0)
+            kill(child_processes[0], SIGINT);
+
+    if (child_processes[0] != 0) {
+        int status = -1;
+        if (waitpid(child_processes[0], &status, 0) < 0) {
+            if (errno != ECHILD)
+                send_log(msg_id, "%s[Director] Failed to wait for child termination! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        } else if (WIFEXITED(status))
+            send_log(msg_id, "%s[Director] Child process %d has terminated (code %d)%s", ERROR_CLR_SET, child_processes[0], WEXITSTATUS(status), CLR_RST);
     }
 }
 
@@ -284,6 +316,13 @@ void *manage_processes(void *arg) {
         if ((p_pid = waitpid(-1, &p_status, WNOHANG)) > 0) {
             send_log(msg_id, "%s[Process Manager] Successfully collected process %d (exit code %d)!%s", INFO_CLR_SET, p_pid, p_status, CLR_RST);
             collected++;
+
+            for (int i = 0; i < 7; i++) {
+                if (child_processes[i] == p_pid) {
+                    child_processes[i] = 0;
+                    break;
+                }
+            }
         }
     }
 

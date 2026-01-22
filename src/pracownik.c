@@ -8,14 +8,24 @@ static Magazine *magazine;
 
 static bool is_active = true;
 
-static void signal_handler(int sig_num);
+static void signal_handler(int sig_num, siginfo_t *sig_info, void *data);
 
 
 int main(int argc, char *argv[]) {
-    if (signal(SIGINT, signal_handler) == SIG_ERR) {
+    struct sigaction sa;
+    sa.sa_sigaction = signal_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
         fprintf(stderr, "%s[Worker] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
+    if (sigaction(SIGTERM, &sa, NULL) == -1) {
+        fprintf(stderr, "%s[Worker] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        return -1;
+    }
+
 
     if (argc != 2) {
         fprintf(stderr, "%s[Worker] Invalid arguments count!%s\n", ERROR_CLR_SET, CLR_RST);
@@ -99,9 +109,9 @@ int main(int argc, char *argv[]) {
                 magazine->buffer[idx_A] = 0;
                 magazine->buffer[idx_B] = 0;
                 magazine->buffer[idx_C] = 0;
-                magazine->type1_produced++;
+                magazine->typeX_produced++;
                 send_log(msg_id, "%s[Worker: X] PRODUCED chocolate type X!%s", INFO_CLR_SET, CLR_RST);
-                if (magazine->type1_produced >= X_TYPE_TO_PRODUCE) {
+                if (magazine->typeX_produced >= X_TYPE_TO_PRODUCE) {
                     send_log(msg_id, "%s[Worker: X] PRODUCTION X COMPLETE | Sending notification to Director%s", INFO_CLR_SET, CLR_RST);
                     kill(getppid(), SIGUSR1);
                     send_log(msg_id, "%s[Worker: X] Killing myself%s", INFO_CLR_SET, CLR_RST);
@@ -131,11 +141,11 @@ int main(int argc, char *argv[]) {
                 magazine->buffer[idx_A] = 0;
                 magazine->buffer[idx_B] = 0;
                 magazine->buffer[idx_D] = 0;
-                magazine->type2_produced++;
+                magazine->typeY_produced++;
                 send_log(msg_id, "%s[Worker: Y] PRODUCED chocolate type Y!%s", INFO_CLR_SET, CLR_RST);
-                if (magazine->type2_produced >= Y_TYPE_TO_PRODUCE) {
+                if (magazine->typeY_produced >= Y_TYPE_TO_PRODUCE) {
                     send_log(msg_id, "%s[Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director%s", INFO_CLR_SET, CLR_RST);
-                    kill(getppid(), SIGUSR2);
+                    kill(getppid(), SIGUSR1);
                     send_log(msg_id, "%s[Worker: Y] Killing myself%s", INFO_CLR_SET, CLR_RST);
 
                     while (semop(sem_id, &unlock, 1) == -1) {
@@ -167,9 +177,14 @@ end_of_loop:
     return 0;
 }
 
-void signal_handler(int sig_num) {
+void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
     if (sig_num == SIGINT) {
         send_log(msg_id, "%s[Worker] Received SIGINT - Terminating%s", INFO_CLR_SET, CLR_RST);
         is_active = false;
+    } else if (sig_num == SIGTERM) {
+        if (getppid() != sig_info->si_pid) {
+            send_log(msg_id, "%s[Worker] Something weird is happening... Notifying Director%s", ERROR_CLR_SET, CLR_RST);
+            kill(getppid(), SIGUSR2);
+        }
     }
 }

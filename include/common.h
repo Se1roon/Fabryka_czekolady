@@ -60,15 +60,8 @@
 
 typedef struct {
     char buffer[MAGAZINE_CAPACITY];
-
-    // Maybe use it for optimization
-    int A_count;
-    int B_count;
-    int C_count;
-    int D_count;
-
-    int type1_produced;
-    int type2_produced;
+    int typeX_produced;
+    int typeY_produced;
 } Magazine;
 
 typedef struct {
