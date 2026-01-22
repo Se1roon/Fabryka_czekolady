@@ -64,40 +64,59 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    struct sembuf lock = {0, -1, 0};
-    struct sembuf unlock = {0, 1, 0};
 
     send_log(msg_id, "%s[Worker: %c] Worker %c started%s", INFO_CLR_SET, worker_type, worker_type, CLR_RST);
 
     while (is_active) {
-        while (semop(sem_id, &lock, 1) == -1) {
-            if (errno != EINTR) {
-                send_log(msg_id, "%s[Worker] Unable to perform semaphore WAIT operation! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
-                goto end_of_loop;
-            }
-        }
+        bool lock_acquired = true;
 
-        int idx_A = -1;
-        int idx_B = -1;
-
-        // Look for A
-        for (int i = IsA; i <= IkA; i++) {
-            if (magazine->buffer[i] == 'A') {
-                idx_A = i;
-                break;
-            }
-        }
-        // Look for B
-        for (int i = IsB; i <= IkB; i++) {
-            if (magazine->buffer[i] == 'B') {
-                idx_B = i;
-                break;
-            }
-        }
-
-        // Type X of chocolate
         if (worker_type == 'X') {
+            struct sembuf sem_op_in[4];
+            sem_op_in[0].sem_num = SEM_FULL_A;
+            sem_op_in[0].sem_op = -1;
+            sem_op_in[0].sem_flg = 0;
+            sem_op_in[1].sem_num = SEM_FULL_B;
+            sem_op_in[1].sem_op = -1;
+            sem_op_in[1].sem_flg = 0;
+            sem_op_in[2].sem_num = SEM_FULL_C;
+            sem_op_in[2].sem_op = -1;
+            sem_op_in[2].sem_flg = 0;
+            sem_op_in[3].sem_num = SEM_MAGAZINE;
+            sem_op_in[3].sem_op = -1;
+            sem_op_in[3].sem_flg = 0;
+
+            while (semop(sem_id, sem_op_in, 4) == -1) {
+                if (errno != EINTR) {
+                    send_log(msg_id, "%s[Worker: %c] Unable to perform semaphore WAIT operation! (%s)%s", ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
+                    exit(-1);
+                }
+                if (!is_active) {
+                    lock_acquired = false;
+                    break;
+                }
+            }
+
+            if (!lock_acquired)
+                break;
+
+            int idx_A = -1;
+            int idx_B = -1;
             int idx_C = -1;
+
+            // Look for A
+            for (int i = IsA; i <= IkA; i++) {
+                if (magazine->buffer[i] == 'A') {
+                    idx_A = i;
+                    break;
+                }
+            }
+            // Look for B
+            for (int i = IsB; i <= IkB; i++) {
+                if (magazine->buffer[i] == 'B') {
+                    idx_B = i;
+                    break;
+                }
+            }
             // Look for C
             for (int i = IsC; i <= IkC; i++) {
                 if (magazine->buffer[i] == 'C') {
@@ -105,30 +124,85 @@ int main(int argc, char *argv[]) {
                     break;
                 }
             }
-            if (idx_A != -1 && idx_B != -1 && idx_C != -1) {
-                magazine->buffer[idx_A] = 0;
-                magazine->buffer[idx_B] = 0;
-                magazine->buffer[idx_C] = 0;
-                magazine->typeX_produced++;
-                send_log(msg_id, "%s[Worker: X] PRODUCED chocolate type X!%s", INFO_CLR_SET, CLR_RST);
-                if (magazine->typeX_produced >= X_TYPE_TO_PRODUCE) {
-                    send_log(msg_id, "%s[Worker: X] PRODUCTION X COMPLETE | Sending notification to Director%s", INFO_CLR_SET, CLR_RST);
-                    kill(getppid(), SIGUSR1);
-                    send_log(msg_id, "%s[Worker: X] Killing myself%s", INFO_CLR_SET, CLR_RST);
 
-                    while (semop(sem_id, &unlock, 1) == -1) {
-                        if (errno != EINTR) {
-                            send_log(msg_id, "%s[Worker: %c] Unable to perform semaphore RELEASE operation! (%s)%s",
-                                     ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
-                            break;
-                        }
-                    }
+            magazine->buffer[idx_A] = 0;
+            magazine->buffer[idx_B] = 0;
+            magazine->buffer[idx_C] = 0;
+            magazine->typeX_produced++;
+            send_log(msg_id, "%s[Worker: X] PRODUCED chocolate type X!%s", INFO_CLR_SET, CLR_RST);
+            if (magazine->typeX_produced >= X_TYPE_TO_PRODUCE) {
+                send_log(msg_id, "%s[Worker: X] PRODUCTION X COMPLETE | Sending notification to Director%s", INFO_CLR_SET, CLR_RST);
+                kill(getppid(), SIGUSR1);
+                is_active = false;
+            }
+
+            struct sembuf sem_op_out[4];
+            sem_op_out[0].sem_num = SEM_MAGAZINE;
+            sem_op_out[0].sem_op = 1;
+            sem_op_out[0].sem_flg = 0;
+            sem_op_out[1].sem_num = SEM_EMPTY_A;
+            sem_op_out[1].sem_op = 1;
+            sem_op_out[1].sem_flg = 0;
+            sem_op_out[2].sem_num = SEM_EMPTY_B;
+            sem_op_out[2].sem_op = 1;
+            sem_op_out[2].sem_flg = 0;
+            sem_op_out[3].sem_num = SEM_EMPTY_C;
+            sem_op_out[3].sem_op = 1;
+            sem_op_out[3].sem_flg = 0;
+
+            while (semop(sem_id, sem_op_out, 4) == -1) {
+                if (errno != EINTR) {
+                    send_log(msg_id, "%s[Worker: %c] Unable to perform semaphore WAIT operation! (%s)%s", ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
+                    exit(-1);
+                }
+            }
+        } else if (worker_type == 'Y') {
+            struct sembuf sem_op_in[4];
+            sem_op_in[0].sem_num = SEM_FULL_A;
+            sem_op_in[0].sem_op = -1;
+            sem_op_in[0].sem_flg = 0;
+            sem_op_in[1].sem_num = SEM_FULL_B;
+            sem_op_in[1].sem_op = -1;
+            sem_op_in[1].sem_flg = 0;
+            sem_op_in[2].sem_num = SEM_FULL_D;
+            sem_op_in[2].sem_op = -1;
+            sem_op_in[2].sem_flg = 0;
+            sem_op_in[3].sem_num = SEM_MAGAZINE;
+            sem_op_in[3].sem_op = -1;
+            sem_op_in[3].sem_flg = 0;
+
+            while (semop(sem_id, sem_op_in, 4) == -1) {
+                if (errno != EINTR) {
+                    send_log(msg_id, "%s[Worker: %c] Unable to perform semaphore WAIT operation! (%s)%s", ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
+                    exit(-1);
+                }
+                if (!is_active) {
+                    lock_acquired = false;
                     break;
                 }
-            } else
-                send_log(msg_id, "%s[Worker: X] Not enough components for type X!%s", WARNING_CLR_SET, CLR_RST);
-        } else if (worker_type == 'Y') {
+            }
+
+            if (!lock_acquired)
+                break;
+
+            int idx_A = -1;
+            int idx_B = -1;
             int idx_D = -1;
+
+            // Look for A
+            for (int i = IsA; i <= IkA; i++) {
+                if (magazine->buffer[i] == 'A') {
+                    idx_A = i;
+                    break;
+                }
+            }
+            // Look for B
+            for (int i = IsB; i <= IkB; i++) {
+                if (magazine->buffer[i] == 'B') {
+                    idx_B = i;
+                    break;
+                }
+            }
             // Look for D
             for (int i = IsD; i <= IkD; i++) {
                 if (magazine->buffer[i] == 'D') {
@@ -137,41 +211,40 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            if (idx_A != -1 && idx_B != -1 && idx_D != -1) {
-                magazine->buffer[idx_A] = 0;
-                magazine->buffer[idx_B] = 0;
-                magazine->buffer[idx_D] = 0;
-                magazine->typeY_produced++;
-                send_log(msg_id, "%s[Worker: Y] PRODUCED chocolate type Y!%s", INFO_CLR_SET, CLR_RST);
-                if (magazine->typeY_produced >= Y_TYPE_TO_PRODUCE) {
-                    send_log(msg_id, "%s[Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director%s", INFO_CLR_SET, CLR_RST);
-                    kill(getppid(), SIGUSR1);
-                    send_log(msg_id, "%s[Worker: Y] Killing myself%s", INFO_CLR_SET, CLR_RST);
-
-                    while (semop(sem_id, &unlock, 1) == -1) {
-                        if (errno != EINTR) {
-                            send_log(msg_id, "%s[Worker: %c] Unable to perform semaphore RELEASE operation! (%s)%s",
-                                     ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
-                            break;
-                        }
-                    }
-                    break;
-                }
-            } else
-                send_log(msg_id, "%s[Worker: Y] Not enough components for type Y!%s", WARNING_CLR_SET, CLR_RST);
-        }
-
-        while (semop(sem_id, &unlock, 1) == -1) {
-            if (errno != EINTR) {
-                send_log(msg_id, "%s[Worker: %c] Unable to perform semaphore RELEASE operation! (%s)%s", ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
-                goto end_of_loop;
+            magazine->buffer[idx_A] = 0;
+            magazine->buffer[idx_B] = 0;
+            magazine->buffer[idx_D] = 0;
+            magazine->typeY_produced++;
+            send_log(msg_id, "%s[Worker: Y] PRODUCED chocolate type Y!%s", INFO_CLR_SET, CLR_RST);
+            if (magazine->typeY_produced >= Y_TYPE_TO_PRODUCE) {
+                send_log(msg_id, "%s[Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director%s", INFO_CLR_SET, CLR_RST);
+                kill(getppid(), SIGUSR1);
+                is_active = false;
             }
+
+            struct sembuf sem_op_out[4];
+            sem_op_out[0].sem_num = SEM_MAGAZINE;
+            sem_op_out[0].sem_op = 1;
+            sem_op_out[0].sem_flg = 0;
+            sem_op_out[1].sem_num = SEM_EMPTY_A;
+            sem_op_out[1].sem_op = 1;
+            sem_op_out[1].sem_flg = 0;
+            sem_op_out[2].sem_num = SEM_EMPTY_B;
+            sem_op_out[2].sem_op = 1;
+            sem_op_out[2].sem_flg = 0;
+            sem_op_out[3].sem_num = SEM_EMPTY_D;
+            sem_op_out[3].sem_op = 1;
+            sem_op_out[3].sem_flg = 0;
+
+            while (semop(sem_id, sem_op_out, 4) == -1) {
+                if (errno != EINTR) {
+                    send_log(msg_id, "%s[Worker: %c] Unable to perform semaphore WAIT operation! (%s)%s", ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
+                    exit(-1);
+                }
+            }
+            sleep(2);
         }
-
-        sched_yield();
     }
-
-end_of_loop:
 
     shmdt(magazine);
     return 0;

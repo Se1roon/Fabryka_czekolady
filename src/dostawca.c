@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    int sem_id = semget(ipc_key, 1, IPC_CREAT | 0600);
+    int sem_id = semget(ipc_key, 5, IPC_CREAT | 0600);
     if (sem_id == -1) {
         fprintf(stderr, "%s[Supplier: %c] Failed to join the Semaphore Set! (%s)%s\n", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
         return -1;
@@ -65,22 +65,46 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    struct sembuf lock = {0, -1, 0};
-    struct sembuf unlock = {0, 1, 0};
-
     int start_index;
     int end_index;
     get_component_indexes(component, &start_index, &end_index);
 
+    int sem_empty = get_semaphore_id(component, true);
+    int sem_full = get_semaphore_id(component, false);
+
+    struct sembuf sem_op_in[2];
+    sem_op_in[0].sem_num = sem_empty;
+    sem_op_in[0].sem_flg = 0;
+    sem_op_in[0].sem_op = -1;
+    sem_op_in[1].sem_num = SEM_MAGAZINE;
+    sem_op_in[1].sem_flg = 0;
+    sem_op_in[1].sem_op = -1;
+    struct sembuf sem_op_out[2];
+    sem_op_out[0].sem_num = SEM_MAGAZINE;
+    sem_op_out[0].sem_flg = 0;
+    sem_op_out[0].sem_op = 1;
+    sem_op_out[1].sem_num = sem_full;
+    sem_op_out[1].sem_flg = 0;
+    sem_op_out[1].sem_op = 1;
+
     send_log(msg_id, "%s[Supplier: %c] Starting deliveries of %c!%s", INFO_CLR_SET, component, component, CLR_RST);
 
     while (is_active) {
-        while (semop(sem_id, &lock, 1) == -1) {
+        bool lock_acquired = true;
+
+        while (semop(sem_id, sem_op_in, 2) == -1) {
             if (errno != EINTR) {
                 send_log(msg_id, "%s[Supplier: %c] Unable to perform semaphore WAIT operation! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
                 exit(-1);
             }
+            if (!is_active) {
+                lock_acquired = false;
+                break;
+            }
         }
+
+        if (!lock_acquired)
+            break;
 
         for (int i = start_index; i <= end_index; i++) {
             if (magazine->buffer[i] == 0) {
@@ -90,14 +114,12 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        while (semop(sem_id, &unlock, 1) == -1) {
+        while (semop(sem_id, sem_op_out, 2) == -1) {
             if (errno != EINTR) {
                 send_log(msg_id, "%s[Supplier: %c] Unable to perform semaphore RELEASE operation! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
                 exit(-1);
             }
         }
-
-        sched_yield();
     }
 
     send_log(msg_id, "%s[Supplier: %c] Terminating%s", INFO_CLR_SET, component, CLR_RST);

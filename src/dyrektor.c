@@ -3,6 +3,11 @@
 
 #include "../include/common.h"
 
+// TODO: When chocolate produced from saved state < chocolate to produce
+//		 DO NOT reset it but use it as a starting point
+// TODO: Print the restored state (typeX_produced, typeX_produced). Also print at the end of simulation how much produced
+// TODO: Handle SIGTERM in Director, and block/release the Magazine semaphore on it (depending on previous state)
+// TODO: Documentation & Tests
 
 static int shm_id = -1;
 static int sem_id = -1;
@@ -62,17 +67,28 @@ int main() {
         return -1;
     }
 
-    sem_id = semget(ipc_key, 1, IPC_CREAT | IPC_EXCL | 0600);
+    sem_id = semget(ipc_key, 9, IPC_CREAT | IPC_EXCL | 0600);
     if (sem_id == -1) {
         fprintf(stderr, "%s[Director] Failed to create Semaphore Set! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         clean_up_IPC();
         return -1;
     }
 
-    // Initialize Semaphore to 1
+    // Initialize Semaphores
     union semun arg;
-    arg.val = 1;
-    if (semctl(sem_id, 0, SETVAL, arg) == -1) {
+    unsigned short values[9];
+    values[SEM_MAGAZINE] = 1;
+    values[SEM_EMPTY_A] = IkA - IsA + 1;
+    values[SEM_EMPTY_B] = IkB - IsB + 1;
+    values[SEM_EMPTY_C] = IkC - IsC + 1;
+    values[SEM_EMPTY_D] = IkD - IsD + 1;
+    values[SEM_FULL_A] = 0;
+    values[SEM_FULL_B] = 0;
+    values[SEM_FULL_C] = 0;
+    values[SEM_FULL_D] = 0;
+
+    arg.array = values;
+    if (semctl(sem_id, 0, SETALL, arg) == -1) {
         fprintf(stderr, "%s[Director] Failed to initialize Semaphore! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         clean_up_IPC();
         return -1;

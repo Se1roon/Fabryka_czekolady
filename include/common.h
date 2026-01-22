@@ -32,10 +32,10 @@
 #define Y_TYPE_SIZE (A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (D_COMPONENT_SIZE)
 
 // Change these
-#define X_TYPE_TO_PRODUCE 100000
-#define Y_TYPE_TO_PRODUCE 10000
+#define X_TYPE_TO_PRODUCE 10000
+#define Y_TYPE_TO_PRODUCE 1000000
 
-#define MAGAZINE_CAPACITY (X_TYPE_TO_PRODUCE) * (X_TYPE_SIZE) + (Y_TYPE_TO_PRODUCE) * (Y_TYPE_SIZE)
+#define MAGAZINE_CAPACITY 700
 
 #define COMPONENT_SPACE (MAGAZINE_CAPACITY) / ((A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (C_COMPONENT_SIZE) + (D_COMPONENT_SIZE))
 
@@ -50,30 +50,61 @@
 #define IsD (IkC) + 1
 #define IkD (IsD) + (3 * (COMPONENT_SPACE) - 1)
 
+union semun {
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
+};
+
+typedef struct {
+    char buffer[MAGAZINE_CAPACITY];
+    int A_count;
+    int B_count;
+    int C_count;
+    int D_count;
+    int typeX_produced;
+    int typeY_produced;
+} Magazine;
+
 // Colors
 #define ERROR_CLR_SET   "\x1b[31m"
 #define INFO_CLR_SET    "\x1b[32m"
 #define WARNING_CLR_SET "\x1b[33m"
 #define CLR_RST         "\x1b[0m"
 
-#define MSG_LOG 1
+// Semaphore ID's
+// Empty - slots available
+// Full - produced
+#define SEM_MAGAZINE 0
+#define SEM_EMPTY_A  1
+#define SEM_EMPTY_B  2
+#define SEM_EMPTY_C  3
+#define SEM_EMPTY_D  4
+#define SEM_FULL_A   5
+#define SEM_FULL_B   6
+#define SEM_FULL_C   7
+#define SEM_FULL_D   8
 
-typedef struct {
-    char buffer[MAGAZINE_CAPACITY];
-    int typeX_produced;
-    int typeY_produced;
-} Magazine;
+static int get_semaphore_id(char type, bool is_empty) {
+    int base = (is_empty) ? SEM_EMPTY_A : SEM_FULL_A;
+    if (type == 'A')
+        return base;
+    if (type == 'B')
+        return base + 1;
+    if (type == 'C')
+        return base + 2;
+    if (type == 'D')
+        return base + 3;
+
+    return -1;
+}
+
+#define MSG_LOG 1
 
 typedef struct {
     long mtype;
     char text[256];
 } LogMsg;
-
-union semun {
-    int val;
-    struct semid_ds *buf;
-    unsigned short *array;
-};
 
 static void send_log(int msg_id, const char *fmt, ...) {
     LogMsg msg;
