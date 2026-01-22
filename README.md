@@ -90,16 +90,16 @@ typedef struct {
     int typeY_produced;
 } Magazine;
 ```
-[Definicja w include/common.h](include/common.h:61)
+[Definicja w include/common.h](include/common.h)
 
 **Semafor**
 | Wartość początkowa | Zastosowanie |
 |--------------------|--------------|
 | 1 | Synchronizacja dostępu do magazynu |
 
-[Użycie w procesie Pracownik](src/pracownik.c:63)
+[Użycie w procesie Pracownik](src/pracownik.c#L63)
 
-[Użycie w procesie Dostawca](src/dostawca.c:68)
+[Użycie w procesie Dostawca](src/dostawca.c#L68)
 
 **Kolejka komunikatów**
 
@@ -111,7 +111,7 @@ typedef struct {
 } LogMsg;
 
 ```
-[Definicja w include/common.h](include/common.h:67)
+[Definicja w include/common.h](include/common.h#L67)
 
 ## Obsługa błędów
 Wszystkie kluczowe funkcje systemowe są sprawdzane pod kątem ewentualnych błędów. Gdy takowy zostanie wykryty następuje wysłanie wiadomości na kolejke komunikatów, oraz (jeśli konieczne) zakończenie działania Fabryki (wyczyszczenie pamięci i procesów potomnych)
@@ -157,5 +157,148 @@ Wiadomość jaka ma zostać wyświetlona jest tworzona przy użyciu funkcji `fpr
 **Test 1 - Test obciążeniowy (X = 100000, Y = 100000)**
 - Test ma za zadanie sprawdzić czy przy dużej liczbie czekolady do wyprodukowania, program się nie zawiesza i faktycznie produkuje odpowiednią liczbę czekolad
 
+```
+[Thu Jan 22 16:42:39 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Thu Jan 22 16:42:39 2026] [Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director
+[Thu Jan 22 16:42:39 2026] [Worker: Y] Killing myself
+[Thu Jan 22 16:42:39 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:42:39 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:42:39 2026] [Director] Stopping A deliveries!
+[Thu Jan 22 16:42:39 2026] [Supplier: D] Delivered D component!
+[Thu Jan 22 16:42:39 2026] [Director] Stopping B deliveries!
+[Thu Jan 22 16:42:39 2026] [Supplier] Received SIGINT
+[Thu Jan 22 16:42:39 2026] [Director] Stopping D deliveries!
+[Thu Jan 22 16:42:39 2026] [Supplier] Received SIGINT
+[Thu Jan 22 16:42:39 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:42:39 2026] [Supplier] Received SIGINT
+[Thu Jan 22 16:42:39 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:42:39 2026] [Supplier: B] Terminating
+[Thu Jan 22 16:42:39 2026] [Supplier: D] Delivered D component!
+[Thu Jan 22 16:42:39 2026] [Supplier: D] Terminating
+[Thu Jan 22 16:42:39 2026] [Supplier: A] Terminating
+[Thu Jan 22 16:42:39 2026] [Process Manager] Successfully collected process 25474 (exit code 0)!
+[Thu Jan 22 16:42:39 2026] [Process Manager] Successfully collected process 25470 (exit code 0)!
+[Thu Jan 22 16:42:39 2026] [Process Manager] Successfully collected process 25472 (exit code 0)!
+[Thu Jan 22 16:42:39 2026] [Process Manager] Successfully collected process 25469 (exit code 0)!
+[Thu Jan 22 16:42:39 2026] [Director] FACTORY FINISHED WORK!
+[Thu Jan 22 16:42:39 2026] [Director] Saved magazine state!
+[Director] Child process 25468 has terminated (code 0)
+
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ cat simulation.log | grep -E ".*PRODUCED.*X.*" | wc -l
+100000
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ cat simulation.log | grep -E ".*PRODUCED.*Y.*" | wc -l
+100000
+```
+
+**Test 2 - Procesy Zombie (X = 100000, Y = 10000)**
+- Test ma na celu zbadanie sytuacji, gdy jeden pracownik kończy pracę a drugi dalej produkuje czekoladę. W tej sytuacji pracownik kończacy pracę wysyla sygnał do dyrektora, który to z kolei hamuje pracę odpowiednich dostawców. Moment ten często powodował pojawianie się procesów zombie.
+
+```
+[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
+[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
+[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
+[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
+[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
+[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
+^Zfish: Job 2, './bin/dyrektor' has stopped
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ps a
+    PID TTY      STAT   TIME COMMAND
+    899 tty2     S<sl+   0:00 /usr/lib/Xorg -nolisten tcp -background none -seat seat0 vt2 -auth /run/sddm/xauth_WWxUKD -noreset -displayfd 16
+   1066 tty1     S<s+   0:00 /usr/bin/sh /usr/lib/uwsm/signal-handler.sh wayland-session-envelope@hyprland.desktop.target
+   1117 tty1     S<+    0:00 systemctl --user start --wait wayland-session-envelope@hyprland.desktop.target
+   2992 pts/1    S<s+   0:00 /bin/fish
+  15480 pts/0    S<sl   0:03 /bin/fish
+  25690 pts/0    T<     0:00 nvim README.md
+  26021 pts/0    T<l    0:03 ./bin/dyrektor
+  26023 pts/0    T<     0:01 ./bin/logger
+  26024 pts/0    T<     0:00 ./bin/dostawca A
+  26025 pts/0    T<     0:00 ./bin/dostawca B
+  26026 pts/0    T<     0:00 ./bin/dostawca C
+  26028 pts/0    T<     0:01 ./bin/pracownik X
+  26050 pts/0    R<+    0:00 ps a
+
+[po wznowieniu]
+
+[Thu Jan 22 16:50:03 2026] [Director] Stopping C deliveries!
+[Thu Jan 22 16:50:03 2026] [Supplier] Received SIGINT
+[Thu Jan 22 16:50:03 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:50:03 2026] [Supplier: C] Terminating
+[Thu Jan 22 16:50:03 2026] [Process Manager] Successfully collected process 26026 (exit code 0)!
+[Thu Jan 22 16:50:03 2026] [Director] FACTORY FINISHED WORK!
+[Thu Jan 22 16:50:03 2026] [Director] Saved magazine state!
+[Director] Child process 26023 has terminated (code 0)
+
+[Director] IPC cleaned up.
+```
+
+**Test 3 - CTRL+C**
+- Test ma na celu sprawdzić czy po kliknięciu CTRL+C program zaciera po sobie ślady
+```
+[Thu Jan 22 16:53:40 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:53:40 2026] [Worker: X] PRODUCED chocolate type X!
+[Thu Jan 22 16:53:40 2026] [Supplier: D] Delivered D component!
+[Thu Jan 22 16:53:40 2026] [Worker: Y] Not enough components for type Y!
+[Thu Jan 22 16:53:40 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:53:40 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:53:40 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:53:40 2026] [Worker: X] PRODUCED chocolate type X!
+[Thu Jan 22 16:53:40 2026] [Supplier: D] Delivered D component!
+[Thu Jan 22 16:53:40 2026] [Worker: Y] Not enough components for type Y!
+[Thu Jan 22 16:53:40 2026] [Supplier: A] Delivered A component!
+[Thu Jan 22 16:53:40 2026] [Supplier: B] Delivered B component!
+[Thu Jan 22 16:53:40 2026] [Supplier: C] Delivered C component!
+[Thu Jan 22 16:53:40 2026] [Worker: X] PRODUCED chocolate type X!
+[Thu Jan 22 16:53:40 2026] [Supplier: D] Delivered D component!
+^C[Thu Jan 22 16:53:40 2026] [Worker] Received SIGINT - Terminating
+[Thu Jan 22 16:53:40 2026] [Worker] Received SIGINT - Terminating
+[Thu Jan 22 16:53:40 2026] [Supplier] Received SIGINT
+[Thu Jan 22 16:53:40 2026] [Supplier] Received SIGINT
+[Thu Jan 22 16:53:40 2026] [Supplier] Received SIGINT
+[Thu Jan 22 16:53:40 2026] [Supplier] Received SIGINT
+[Thu Jan 22 16:53:40 2026] [Worker: Y] Not enough components for type Y!
+
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ipcs
+
+------ Message Queues --------
+key        msqid      owner      perms      used-bytes   messages    
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+0xce320210 1          root       666        1024       1                       
+
+------ Semaphore Arrays --------
+key        semid      owner      perms      nsems     
 
 
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ 
+```
+- Jak widać program wykrył sygnał, zabił swoje dzieci i zatarł ślady z powodzeniem
