@@ -32,8 +32,8 @@
 #define Y_TYPE_SIZE (A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (D_COMPONENT_SIZE)
 
 // Change these
-#define X_TYPE_TO_PRODUCE 125000
-#define Y_TYPE_TO_PRODUCE 250000
+#define X_TYPE_TO_PRODUCE 10
+#define Y_TYPE_TO_PRODUCE 3
 
 // Keep this < 50000 so that semaphore operations don't fail
 // Should be able to handle up to around 75,000 on most systems, but there is no reason to make it that big.

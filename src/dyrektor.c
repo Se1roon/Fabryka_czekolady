@@ -123,7 +123,6 @@ int main() {
     // restore the amount of chocolate that has been produced so far.
     // If the number of chocolate produced is less than the desired amount
     // it is probably a different simulation so reset it.
-    printf("%d\n", magazine->typeX_produced);
     if (magazine->typeX_produced >= X_TYPE_TO_PRODUCE)
         magazine->typeX_produced = 0;
     if (magazine->typeY_produced >= Y_TYPE_TO_PRODUCE)
@@ -239,8 +238,8 @@ int main() {
 
 void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
     if (sig_num == SIGINT) {
-        save_state();
         send_log(msg_id, "%s[Director] Received SIGINT%s", INFO_CLR_SET, CLR_RST);
+        save_state();
         clean_up_CHILDREN(child_processes, 7, true);
         clean_up_IPC();
         exit(0);

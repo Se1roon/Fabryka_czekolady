@@ -154,134 +154,60 @@ Wiadomość jaka ma zostać wyświetlona jest tworzona przy użyciu funkcji `fpr
 - Uruchamia procesy dostawców oraz pracowników.
 
 ## Testy
-**Test 1 - Test obciążeniowy (X = 100000, Y = 100000)**
-- Test ma za zadanie sprawdzić czy przy dużej liczbie czekolady do wyprodukowania, program się nie zawiesza i faktycznie produkuje odpowiednią liczbę czekolad
+
+Wszystkie testy przeprowadzane są przy założonej pojemności magazynu `MAGAZINE_CAPACITY = 1000`.
+
+**Test 1 - Normalna praca fabryki, zwalnianie struktur IPC**
+- Test ma na celu sprawdzić czy program działa poprawnie podczas zwyczajnych warunków
+
+| Stała | Wartość |
+|-------|---------|
+| `X_TO_PRODUCE` | 10000 |
+| `Y_TO_PRODUCE` | 10000 |
 
 ```
-[Thu Jan 22 16:42:39 2026] [Worker: Y] PRODUCED chocolate type Y!
-[Thu Jan 22 16:42:39 2026] [Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director
-[Thu Jan 22 16:42:39 2026] [Worker: Y] Killing myself
-[Thu Jan 22 16:42:39 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:42:39 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:42:39 2026] [Director] Stopping A deliveries!
-[Thu Jan 22 16:42:39 2026] [Supplier: D] Delivered D component!
-[Thu Jan 22 16:42:39 2026] [Director] Stopping B deliveries!
-[Thu Jan 22 16:42:39 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:42:39 2026] [Director] Stopping D deliveries!
-[Thu Jan 22 16:42:39 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:42:39 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:42:39 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:42:39 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:42:39 2026] [Supplier: B] Terminating
-[Thu Jan 22 16:42:39 2026] [Supplier: D] Delivered D component!
-[Thu Jan 22 16:42:39 2026] [Supplier: D] Terminating
-[Thu Jan 22 16:42:39 2026] [Supplier: A] Terminating
-[Thu Jan 22 16:42:39 2026] [Process Manager] Successfully collected process 25474 (exit code 0)!
-[Thu Jan 22 16:42:39 2026] [Process Manager] Successfully collected process 25470 (exit code 0)!
-[Thu Jan 22 16:42:39 2026] [Process Manager] Successfully collected process 25472 (exit code 0)!
-[Thu Jan 22 16:42:39 2026] [Process Manager] Successfully collected process 25469 (exit code 0)!
-[Thu Jan 22 16:42:39 2026] [Director] FACTORY FINISHED WORK!
-[Thu Jan 22 16:42:39 2026] [Director] Saved magazine state!
-[Director] Child process 25468 has terminated (code 0)
-
-[Director] IPC cleaned up.
-
 ~/Documents/Studia/SO/Fabryka_czekolady main*
-❯ cat simulation.log | grep -E ".*PRODUCED.*X.*" | wc -l
-100000
-
-~/Documents/Studia/SO/Fabryka_czekolady main*
-❯ cat simulation.log | grep -E ".*PRODUCED.*Y.*" | wc -l
-100000
-```
-
-**Test 2 - Procesy Zombie (X = 100000, Y = 10000)**
-- Test ma na celu zbadanie sytuacji, gdy jeden pracownik kończy pracę a drugi dalej produkuje czekoladę. W tej sytuacji pracownik kończacy pracę wysyla sygnał do dyrektora, który to z kolei hamuje pracę odpowiednich dostawców. Moment ten często powodował pojawianie się procesów zombie.
-
-```
-[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:49:50 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:49:50 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:49:50 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:49:50 2026] [Worker: X] PRODUCED chocolate type X!
-^Zfish: Job 2, './bin/dyrektor' has stopped
-
-~/Documents/Studia/SO/Fabryka_czekolady main*
-❯ ps a
-    PID TTY      STAT   TIME COMMAND
-    899 tty2     S<sl+   0:00 /usr/lib/Xorg -nolisten tcp -background none -seat seat0 vt2 -auth /run/sddm/xauth_WWxUKD -noreset -displayfd 16
-   1066 tty1     S<s+   0:00 /usr/bin/sh /usr/lib/uwsm/signal-handler.sh wayland-session-envelope@hyprland.desktop.target
-   1117 tty1     S<+    0:00 systemctl --user start --wait wayland-session-envelope@hyprland.desktop.target
-   2992 pts/1    S<s+   0:00 /bin/fish
-  15480 pts/0    S<sl   0:03 /bin/fish
-  25690 pts/0    T<     0:00 nvim README.md
-  26021 pts/0    T<l    0:03 ./bin/dyrektor
-  26023 pts/0    T<     0:01 ./bin/logger
-  26024 pts/0    T<     0:00 ./bin/dostawca A
-  26025 pts/0    T<     0:00 ./bin/dostawca B
-  26026 pts/0    T<     0:00 ./bin/dostawca C
-  26028 pts/0    T<     0:01 ./bin/pracownik X
-  26050 pts/0    R<+    0:00 ps a
-
-[po wznowieniu]
-
-[Thu Jan 22 16:50:03 2026] [Director] Stopping C deliveries!
-[Thu Jan 22 16:50:03 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:50:03 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:50:03 2026] [Supplier: C] Terminating
-[Thu Jan 22 16:50:03 2026] [Process Manager] Successfully collected process 26026 (exit code 0)!
-[Thu Jan 22 16:50:03 2026] [Director] FACTORY FINISHED WORK!
-[Thu Jan 22 16:50:03 2026] [Director] Saved magazine state!
-[Director] Child process 26023 has terminated (code 0)
-
-[Director] IPC cleaned up.
-```
-
-**Test 3 - CTRL+C**
-- Test ma na celu sprawdzić czy po kliknięciu CTRL+C program zaciera po sobie ślady
-```
-[Thu Jan 22 16:53:40 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:53:40 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:53:40 2026] [Supplier: D] Delivered D component!
-[Thu Jan 22 16:53:40 2026] [Worker: Y] Not enough components for type Y!
-[Thu Jan 22 16:53:40 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:53:40 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:53:40 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:53:40 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:53:40 2026] [Supplier: D] Delivered D component!
-[Thu Jan 22 16:53:40 2026] [Worker: Y] Not enough components for type Y!
-[Thu Jan 22 16:53:40 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:53:40 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:53:40 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:53:40 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:53:40 2026] [Supplier: D] Delivered D component!
-^C[Thu Jan 22 16:53:40 2026] [Worker] Received SIGINT - Terminating
-[Thu Jan 22 16:53:40 2026] [Worker] Received SIGINT - Terminating
-[Thu Jan 22 16:53:40 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:53:40 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:53:40 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:53:40 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:53:40 2026] [Worker: Y] Not enough components for type Y!
-
+❯ ./bin/dyrektor 
+.
+.
+[Fri Jan 23 16:54:20 2026] [Worker: X] PRODUCTION X COMPLETE | Sending notification to Director
+[Fri Jan 23 16:54:20 2026] [Worker: X] Terminating
+[Fri Jan 23 16:54:20 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:54:20 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:54:20 2026] [Director] Stopping C deliveries!
+[Fri Jan 23 16:54:20 2026] [Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director
+[Fri Jan 23 16:54:20 2026] [Supplier] Received SIGINT
+[Fri Jan 23 16:54:20 2026] [Worker: Y] Terminating
+[Fri Jan 23 16:54:20 2026] [Supplier: C] Terminating
+[Fri Jan 23 16:54:20 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:54:20 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:54:20 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:54:20 2026] [Director] Stopping A deliveries!
+[Fri Jan 23 16:54:20 2026] [Supplier] Received SIGINT
+[Fri Jan 23 16:54:20 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:54:20 2026] [Supplier: A] Terminating
+[Fri Jan 23 16:54:20 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:54:20 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:54:20 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:54:20 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:54:20 2026] [Director] Stopping B deliveries!
+[Fri Jan 23 16:54:20 2026] [Process Manager] Successfully collected process 74191 (exit code 0)!
+[Fri Jan 23 16:54:20 2026] [Supplier] Received SIGINT
+[Fri Jan 23 16:54:20 2026] [Process Manager] Successfully collected process 74189 (exit code 0)!
+[Fri Jan 23 16:54:20 2026] [Supplier: B] Terminating
+[Fri Jan 23 16:54:20 2026] [Director] Stopping D deliveries!
+[Fri Jan 23 16:54:20 2026] [Supplier] Received SIGINT
+[Fri Jan 23 16:54:20 2026] [Process Manager] Successfully collected process 74192 (exit code 0)!
+[Fri Jan 23 16:54:20 2026] [Supplier: D] Terminating
+[Fri Jan 23 16:54:20 2026] [Process Manager] Successfully collected process 74187 (exit code 0)!
+[Fri Jan 23 16:54:20 2026] [Process Manager] Successfully collected process 74188 (exit code 0)!
+[Fri Jan 23 16:54:20 2026] [Process Manager] Successfully collected process 74190 (exit code 0)!
+[Fri Jan 23 16:54:20 2026] [Director] FACTORY FINISHED WORK!
+[Fri Jan 23 16:54:20 2026] [Director] Saved magazine state!
+[Director] Child process 74186 has terminated (code 0)
+[Director] Amount of chocolate produced:
+	X = 10000
+	Y = 10000
 [Director] IPC cleaned up.
 
 ~/Documents/Studia/SO/Fabryka_czekolady main*
@@ -299,149 +225,813 @@ key        semid      owner      perms      nsems
 
 
 ~/Documents/Studia/SO/Fabryka_czekolady main*
-❯ 
+❯
 ```
-- Jak widać program wykrył sygnał, zabił swoje dzieci i zatarł ślady z powodzeniem
 
-**Test 4 - Atak terrorystyczny**
+**Test 2 - Różne ilości czekolady do wyprodukowania & Procesy zombie**
+- Test sprawdza czy kiedy jeden z pracowników skończy pracę, prawdidłowo informowany jest dyrektor oraz czy przerywane są dostawy nie potrzebnych dłużej składników. Sytuacja ta często skutkowała pojawianiem się procesów *zombie*, więc test dodatkowo sprawdza pracę wątku odpowiedzialnego za zbieranie procesów.
+
+| Stała | Wartość |
+|-------|---------|
+| `X_TO_PRODUCE` | 100000 |
+| `Y_TO_PRODUCE` | 10000 |
 
 ```
-[Thu Jan 22 16:56:38 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:38 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:38 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:38 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:38 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:38 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:38 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:38 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:38 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:38 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:38 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:38 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:38 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:38 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:38 2026] [Supplier: B] Delivered B component!
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor 
+.
+.
+[Fri Jan 23 16:56:02 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:56:02 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:56:02 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:56:02 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:56:02 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:56:02 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:56:02 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:56:02 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:56:02 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:56:02 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:56:02 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:56:02 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:56:02 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:56:02 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:56:02 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:56:02 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:56:02 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:56:02 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:56:02 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:56:02 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:56:02 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:56:02 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:56:02 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:56:02 2026] [Supplier: A] Delivered A component!
 ^Zfish: Job 2, './bin/dyrektor' has stopped
 
 ~/Documents/Studia/SO/Fabryka_czekolady main*
 ❯ ps a
     PID TTY      STAT   TIME COMMAND
-    899 tty2     S<sl+   0:00 /usr/lib/Xorg -nolisten tcp -background none -seat seat0 vt2 -auth /run/sddm/xauth_WWxUKD -noreset -displayfd 16
-   1066 tty1     S<s+   0:00 /usr/bin/sh /usr/lib/uwsm/signal-handler.sh wayland-session-envelope@hyprland.desktop.target
-   1117 tty1     S<+    0:00 systemctl --user start --wait wayland-session-envelope@hyprland.desktop.target
-   2992 pts/1    S<s+   0:00 /bin/fish
-  15480 pts/0    S<sl   0:03 /bin/fish
-  26430 pts/0    T<     0:00 nvim README.md
-  26500 pts/0    T<l    0:03 ./bin/dyrektor
-  26502 pts/0    T<     0:01 ./bin/logger
-  26503 pts/0    T<     0:00 ./bin/dostawca A
-  26504 pts/0    T<     0:00 ./bin/dostawca B
-  26505 pts/0    T<     0:00 ./bin/dostawca C
-  26507 pts/0    T<     0:01 ./bin/pracownik X
-  26529 pts/0    R<+    0:00 ps a
-
-~/Documents/Studia/SO/Fabryka_czekolady main*
-❯ kill 26505
+    855 tty2     S<sl+   0:01 /usr/lib/Xorg -nolisten tcp -background none -seat seat0 vt2 -auth /run/sddm/xauth_nYSvBj -noreset -displayfd 16
+   1146 tty1     S<s+   0:00 /usr/bin/sh /usr/lib/uwsm/signal-handler.sh wayland-session-envelope@hyprland.desktop.target
+   1204 tty1     S<+    0:00 systemctl --user start --wait wayland-session-envelope@hyprland.desktop.target
+   3412 pts/1    S<sl   0:05 /bin/fish
+  71498 pts/1    T<     0:00 nvim README.md
+  74607 pts/1    T<l    0:02 ./bin/dyrektor
+  74609 pts/1    T<     0:02 ./bin/logger
+  74610 pts/1    T<     0:00 ./bin/dostawca A
+  74611 pts/1    T<     0:00 ./bin/dostawca B
+  74612 pts/1    T<     0:00 ./bin/dostawca C
+  74614 pts/1    T<     0:00 ./bin/pracownik X
+  74709 pts/1    R<+    0:00 ps a
 
 ~/Documents/Studia/SO/Fabryka_czekolady main*
 ❯ fg
-Send job 2 (./bin/dyrektor) to foreground
-[Thu Jan 22 16:56:38 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier] Something weird is happening... Notifying Director
-[Thu Jan 22 16:56:44 2026] [Director] Received SIGUSR2... A terrorist attack detected!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Delivered B component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Worker] Received SIGINT - Terminating
-[Thu Jan 22 16:56:44 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:56:44 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:56:44 2026] [Supplier: B] Terminating
-[Thu Jan 22 16:56:44 2026] [Supplier] Received SIGINT
-[Thu Jan 22 16:56:44 2026] [Worker: X] PRODUCED chocolate type X!
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Delivered A component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Delivered C component!
-[Thu Jan 22 16:56:44 2026] [Supplier: C] Terminating
-[Thu Jan 22 16:56:44 2026] [Supplier: A] Terminating
-[Thu Jan 22 16:56:44 2026] [Director] Child process 26507 has terminated (code 0)
-[Thu Jan 22 16:56:44 2026] [Director] Child process 26505 has terminated (code 0)
-[Thu Jan 22 16:56:44 2026] [Director] Child process 26504 has terminated (code 0)
-[Thu Jan 22 16:56:44 2026] [Director] Child process 26503 has terminated (code 0)
-
+.
+.
+[Fri Jan 23 16:57:34 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:57:34 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:57:34 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:57:34 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:57:34 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:57:34 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:57:34 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:57:34 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:57:34 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:57:34 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:57:34 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:57:34 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 16:57:34 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:57:34 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:57:34 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 16:57:34 2026] [Worker: X] PRODUCTION X COMPLETE | Sending notification to Director
+[Fri Jan 23 16:57:34 2026] [Worker: X] Terminating
+[Fri Jan 23 16:57:34 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 16:57:34 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 16:57:34 2026] [Director] Stopping A deliveries!
+[Fri Jan 23 16:57:34 2026] [Director] Stopping B deliveries!
+[Fri Jan 23 16:57:34 2026] [Supplier] Received SIGINT
+[Fri Jan 23 16:57:34 2026] [Supplier: A] Terminating
+[Fri Jan 23 16:57:34 2026] [Director] Stopping C deliveries!
+[Fri Jan 23 16:57:34 2026] [Supplier] Received SIGINT
+[Fri Jan 23 16:57:34 2026] [Supplier] Received SIGINT
+[Fri Jan 23 16:57:34 2026] [Supplier: C] Terminating
+[Fri Jan 23 16:57:34 2026] [Supplier: B] Terminating
+[Fri Jan 23 16:57:34 2026] [Process Manager] Successfully collected process 74614 (exit code 0)!
+[Fri Jan 23 16:57:34 2026] [Process Manager] Successfully collected process 74610 (exit code 0)!
+[Fri Jan 23 16:57:34 2026] [Process Manager] Successfully collected process 74611 (exit code 0)!
+[Fri Jan 23 16:57:34 2026] [Process Manager] Successfully collected process 74612 (exit code 0)!
+[Fri Jan 23 16:57:34 2026] [Director] FACTORY FINISHED WORK!
+[Fri Jan 23 16:57:34 2026] [Director] Saved magazine state!
+[Director] Child process 74609 has terminated (code 0)
+[Director] Amount of chocolate produced:
+	X = 100000
+	Y = 10000
 [Director] IPC cleaned up.
 
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯
+```
+
+**Test 3 - Sygnał CTRL+C**
+- Test sprawdza czy po otrzymaniu sygnału *SIGINT* dyrektor poprawnie to wyłapuje i kończy pracę fabryki.
+
+| Stała | Wartość |
+|-------|---------|
+| `X_TO_PRODUCE` | 100000 |
+| `Y_TO_PRODUCE` | 200000 |
+
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor 
+.
+.
+^C[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:06:14 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:06:14 2026] [Worker] Received SIGINT - Terminating
+[Fri Jan 23 17:06:14 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:06:14 2026] [Worker: Y] Terminating
+[Fri Jan 23 17:06:14 2026] [Worker] Received SIGINT - Terminating
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:06:14 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:06:14 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:06:14 2026] [Supplier: C] Terminating
+[Fri Jan 23 17:06:14 2026] [Supplier: D] Terminating
+[Fri Jan 23 17:06:14 2026] [Worker: X] Terminating
+[Fri Jan 23 17:06:14 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:06:14 2026] [Director] Received SIGINT
+[Fri Jan 23 17:06:14 2026] [Supplier: A] Terminating
+[Fri Jan 23 17:06:14 2026] [Supplier: B] Terminating
+[Fri Jan 23 17:06:14 2026] [Process Manager] Successfully collected process 76750 (exit code 0)!
+[Fri Jan 23 17:06:14 2026] [Process Manager] Successfully collected process 76747 (exit code 0)!
+[Fri Jan 23 17:06:14 2026] [Director] Saved magazine state!
+[Fri Jan 23 17:06:14 2026] [Process Manager] Successfully collected process 76748 (exit code 0)!
+[Fri Jan 23 17:06:14 2026] [Process Manager] Successfully collected process 76749 (exit code 0)!
+[Fri Jan 23 17:06:14 2026] [Process Manager] Successfully collected process 76745 (exit code 0)!
+[Fri Jan 23 17:06:14 2026] [Process Manager] Successfully collected process 76746 (exit code 0)!
+[Director] Amount of chocolate produced:
+	X = 26074
+	Y = 26070
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ 
+```
+
+**Test 4 - Sygnał SIGTERM, zmienianie dostępności magazynu**
+- Test sprawdza czy po otrzymaniu sygnału SIGTERM dyrektor poprawnie steruje pracą magazynu. Sygnał ten działa jak przełączenik, który wstrzymuje/wznawia pracę magazynu.
+
+| Stała | Wartość |
+|-------|---------|
+| `X_TO_PRODUCE` | 100000 |
+| `Y_TO_PRODUCE` | 200000 |
+
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor 
+.
+.
+.
+[kill <pid dyrektora>]
+.
+[Fri Jan 23 17:07:35 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:07:35 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:07:35 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:07:35 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:07:35 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:07:35 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:07:35 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:07:35 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:07:35 2026] [Director] Received SIGTERM... Stopping Magazine!
+[Fri Jan 23 17:07:35 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:07:35 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:07:35 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:07:35 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:07:35 2026] [Director] Magazine Stopped!
+[kill <pid dyrektora]
+.
+.
+[Fri Jan 23 17:07:57 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:07:57 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:07:57 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:07:57 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:07:57 2026] [Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director
+[Fri Jan 23 17:07:57 2026] [Worker: Y] Terminating
+[Fri Jan 23 17:07:57 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:07:57 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:07:57 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:07:57 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:07:57 2026] [Director] Stopping A deliveries!
+[Fri Jan 23 17:07:57 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:07:57 2026] [Director] Stopping B deliveries!
+[Fri Jan 23 17:07:57 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:07:57 2026] [Director] Stopping D deliveries!
+[Fri Jan 23 17:07:57 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:07:57 2026] [Supplier: A] Terminating
+[Fri Jan 23 17:07:57 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:07:57 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:07:57 2026] [Supplier: B] Terminating
+[Fri Jan 23 17:07:57 2026] [Supplier: D] Terminating
+[Fri Jan 23 17:07:57 2026] [Process Manager] Successfully collected process 77187 (exit code 0)!
+[Fri Jan 23 17:07:57 2026] [Process Manager] Successfully collected process 77188 (exit code 0)!
+[Fri Jan 23 17:07:57 2026] [Process Manager] Successfully collected process 77190 (exit code 0)!
+[Fri Jan 23 17:07:57 2026] [Process Manager] Successfully collected process 77192 (exit code 0)!
+[Fri Jan 23 17:07:57 2026] [Director] FACTORY FINISHED WORK!
+[Fri Jan 23 17:07:57 2026] [Director] Saved magazine state!
+[Director] Child process 77186 has terminated (code 0)
+[Director] Amount of chocolate produced:
+	X = 100000
+	Y = 200000
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main* 28s
+❯ 
+```
+
+**Test 5 - Atak terrorystyczny. Niespodziewane zakończenie pracy jednego z procesów potomnych**
+- Gdy podczas symulacji jeden z procesów potomnych (pracownik, dostawca, logger) otrzyma sygnał SIGTERM nie pochodzący od dyrektora uznawane jest to za atak terrorystyczny. W takim przypadku proces, który otrzymał takowy sygnał powiadamia o sytuacji dyrektora, który to z kolei zamyka fabrykę.
+
+| Stała | Wartość |
+|-------|---------|
+| `X_TO_PRODUCE` | 100000 |
+| `Y_TO_PRODUCE` | 200000 |
+
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor 
+.
+.
+[kill <pid dostawcy]
+.
+Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier] Something weird is happening... Notifying Director
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Director] Received SIGUSR2... A terrorist attack detected!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Director] Saved magazine state!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Worker] Received SIGINT - Terminating
+[Fri Jan 23 17:18:18 2026] [Worker: Y] Terminating
+[Fri Jan 23 17:18:18 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:18:18 2026] [Supplier: B] Terminating
+[Fri Jan 23 17:18:18 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:18:18 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:18:18 2026] [Supplier: D] Terminating
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:18:18 2026] [Supplier: A] Terminating
+[Fri Jan 23 17:18:18 2026] [Director] Child process 78919 has terminated (code 0)
+[Fri Jan 23 17:18:18 2026] [Director] Child process 78917 has terminated (code 0)
+[Fri Jan 23 17:18:18 2026] [Director] Child process 78915 has terminated (code 0)
+[Fri Jan 23 17:18:18 2026] [Director] Child process 78914 has terminated (code 0)
+[Director] Amount of chocolate produced:
+	X = 100000
+	Y = 135272
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main* 6s
+❯ 
+```
+
+**Test 6 - Prawidłowy zapis/odczyt do pliku. Prawidłowe wznawianie pracy po przedwczesnym zamknięciu fabryki**
+- Test sprawdza czy stan magazynu jest prawidłowo zapisywany oraz odczytywany. Gdy do wyprodukowania było np. 100000 czekolady typu X, ale w skutek chociażby ataku terrorystycznego, fabryka została zamknięta, to przy ponownym uruchomieniu liczba czekolady, którą udało się wyprodukować powinno zostać odczytana.
+
+| Stała | Wartość |
+|-------|---------|
+| `X_TO_PRODUCE` | 100000 |
+| `Y_TO_PRODUCE` | 200000 |
+*Te wartości nie powinny się zmienić podczas drugiej egzekucji programu*
+
+*1 wywołanie programu*
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor 
+.
+.
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+^C[Fri Jan 23 17:21:19 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:21:19 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:21:19 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:21:19 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:21:19 2026] [Supplier: A] Terminating
+[Fri Jan 23 17:21:19 2026] [Worker] Received SIGINT - Terminating
+[Fri Jan 23 17:21:19 2026] [Worker: X] Terminating
+[Fri Jan 23 17:21:19 2026] [Supplier: D] Terminating
+[Fri Jan 23 17:21:19 2026] [Supplier: B] Terminating
+[Fri Jan 23 17:21:19 2026] [Worker] Received SIGINT - Terminating
+[Fri Jan 23 17:21:19 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:21:19 2026] [Supplier: C] Terminating
+[Fri Jan 23 17:21:19 2026] [Worker: Y] Terminating
+[Fri Jan 23 17:21:19 2026] [Director] Received SIGINT
+[Fri Jan 23 17:21:19 2026] [Director] Saved magazine state!
+[Fri Jan 23 17:21:19 2026] [Process Manager] Successfully collected process 79516 (exit code 0)!
+[Fri Jan 23 17:21:19 2026] [Process Manager] Successfully collected process 79517 (exit code 0)!
+[Fri Jan 23 17:21:19 2026] [Process Manager] Successfully collected process 79518 (exit code 0)!
+[Fri Jan 23 17:21:19 2026] [Process Manager] Successfully collected process 79519 (exit code 0)!
+[Fri Jan 23 17:21:19 2026] [Process Manager] Successfully collected process 79520 (exit code 0)!
+[Fri Jan 23 17:21:19 2026] [Process Manager] Successfully collected process 79521 (exit code 0)!
+[Director] Amount of chocolate produced:
+	X = 8760
+	Y = 8758
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ 
+```
+
+*2 wywołanie programu*
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor 
+[Fri Jan 23 17:22:53 2026] [Director] IPC Resources created!
+[Fri Jan 23 17:22:53 2026] [Director] Restoring magazine state...
+[Fri Jan 23 17:22:53 2026] [Director] Restored magazine state!
+[Fri Jan 23 17:22:53 2026] [Director] Amount of chocolate produced so far:
+	X = 8760
+	Y = 8758
+[Fri Jan 23 17:22:53 2026] [Director] Creating thread for managing processes...
+[Fri Jan 23 17:22:53 2026] [Director] Process Management thread launched successfully!
+[Fri Jan 23 17:22:53 2026] [Director] Spawning child processes...
+[Fri Jan 23 17:22:53 2026] [Supplier: A] Starting deliveries of A!
+[Fri Jan 23 17:22:53 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:22:53 2026] [Supplier: A] Delivered A component!
+.
+.
+.
+[Fri Jan 23 17:23:02 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:23:02 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:23:02 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:23:02 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:23:02 2026] [Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director
+[Fri Jan 23 17:23:02 2026] [Worker: Y] Terminating
+[Fri Jan 23 17:23:02 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:23:02 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:23:02 2026] [Director] Stopping A deliveries!
+[Fri Jan 23 17:23:02 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:23:02 2026] [Director] Stopping B deliveries!
+[Fri Jan 23 17:23:02 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:23:02 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:23:02 2026] [Director] Stopping D deliveries!
+[Fri Jan 23 17:23:02 2026] [Supplier: A] Terminating
+[Fri Jan 23 17:23:02 2026] [Supplier: B] Terminating
+[Fri Jan 23 17:23:02 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:23:02 2026] [Supplier: D] Terminating
+[Fri Jan 23 17:23:02 2026] [Process Manager] Successfully collected process 79839 (exit code 0)!
+[Fri Jan 23 17:23:02 2026] [Process Manager] Successfully collected process 79834 (exit code 0)!
+[Fri Jan 23 17:23:02 2026] [Process Manager] Successfully collected process 79835 (exit code 0)!
+[Fri Jan 23 17:23:02 2026] [Process Manager] Successfully collected process 79837 (exit code 0)!
+[Fri Jan 23 17:23:02 2026] [Director] FACTORY FINISHED WORK!
+[Fri Jan 23 17:23:02 2026] [Director] Saved magazine state!
+[Director] Child process 79833 has terminated (code 0)
+[Director] Amount of chocolate produced:
+	X = 100000
+	Y = 200000
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main* 8s
+❯ 
+
+```
+
+**Test 7 - Blokowanie magazynu**
+- Test sprawdza czy, kiedy jeden z pracowników będzie bardzo wolny, to ciągłe próby dostaw nie zablokują dostępu do magazynu.
+
+| Stała | Wartość |
+|-------|---------|
+| `X_TO_PRODUCE` | 10 |
+| `Y_TO_PRODUCE` | 3 |
+*Po wyprodukowaniu Y proces pracownika jest usypiany na 5 sekund*
+
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor
+[Fri Jan 23 17:41:46 2026] [Director] IPC Resources created!
+[Fri Jan 23 17:41:46 2026] [Director] Restoring magazine state...
+[Fri Jan 23 17:41:46 2026] [Director] Restored magazine state!
+[Fri Jan 23 17:41:46 2026] [Director] Amount of chocolate produced so far:
+	X = 0
+	Y = 0
+[Fri Jan 23 17:41:46 2026] [Director] Creating thread for managing processes...
+[Fri Jan 23 17:41:46 2026] [Director] Process Management thread launched successfully!
+[Fri Jan 23 17:41:46 2026] [Director] Spawning child processes...
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Starting deliveries of A!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Director] Spawned child processes!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Director] Waiting for Factory to finish work!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Starting deliveries of B!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Starting deliveries of C!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: D] Starting deliveries of D!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Worker: Y] Worker Y started
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] Worker X started
+[Fri Jan 23 17:41:46 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCED chocolate type X!
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Delivered C component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:46 2026] [Worker: X] PRODUCTION X COMPLETE | Sending notification to Director
+[Fri Jan 23 17:41:46 2026] [Worker: X] Terminating
+[Fri Jan 23 17:41:46 2026] [Director] Stopping C deliveries!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:41:46 2026] [Supplier: C] Terminating
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Process Manager] Successfully collected process 83890 (exit code 0)!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Process Manager] Successfully collected process 83888 (exit code 0)!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:46 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:51 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:41:51 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:51 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:51 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:41:56 2026] [Worker: Y] PRODUCED chocolate type Y!
+[Fri Jan 23 17:41:56 2026] [Supplier: A] Delivered A component!
+[Fri Jan 23 17:41:56 2026] [Supplier: B] Delivered B component!
+[Fri Jan 23 17:41:56 2026] [Supplier: D] Delivered D component!
+[Fri Jan 23 17:42:01 2026] [Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director
+[Fri Jan 23 17:42:01 2026] [Director] Stopping A deliveries!
+[Fri Jan 23 17:42:01 2026] [Director] Stopping B deliveries!
+[Fri Jan 23 17:42:01 2026] [Director] Stopping D deliveries!
+[Fri Jan 23 17:42:01 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:42:01 2026] [Supplier: A] Terminating
+[Fri Jan 23 17:42:01 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:42:01 2026] [Supplier: B] Terminating
+[Fri Jan 23 17:42:01 2026] [Supplier] Received SIGINT
+[Fri Jan 23 17:42:01 2026] [Supplier: D] Terminating
+[Fri Jan 23 17:42:01 2026] [Process Manager] Successfully collected process 83886 (exit code 0)!
+[Fri Jan 23 17:42:01 2026] [Process Manager] Successfully collected process 83887 (exit code 0)!
+[Fri Jan 23 17:42:01 2026] [Process Manager] Successfully collected process 83889 (exit code 0)!
+[Fri Jan 23 17:42:06 2026] [Worker: Y] Terminating
+[Fri Jan 23 17:42:06 2026] [Process Manager] Successfully collected process 83891 (exit code 0)!
+[Fri Jan 23 17:42:06 2026] [Director] FACTORY FINISHED WORK!
+[Fri Jan 23 17:42:06 2026] [Director] Saved magazine state!
+[Director] Child process 83885 has terminated (code 0)
+[Director] Amount of chocolate produced:
+	X = 10
+	Y = 3
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main* 20s
+❯ 
 ```
