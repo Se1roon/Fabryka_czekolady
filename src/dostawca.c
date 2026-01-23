@@ -77,11 +77,11 @@ int main(int argc, char *argv[]) {
     sem_op_in[0].sem_flg = 0;
     sem_op_in[0].sem_op = -1;
     sem_op_in[1].sem_num = SEM_MAGAZINE;
-    sem_op_in[1].sem_flg = 0;
+    sem_op_in[1].sem_flg = SEM_UNDO;
     sem_op_in[1].sem_op = -1;
     struct sembuf sem_op_out[2];
     sem_op_out[0].sem_num = SEM_MAGAZINE;
-    sem_op_out[0].sem_flg = 0;
+    sem_op_out[0].sem_flg = SEM_UNDO;
     sem_op_out[0].sem_op = 1;
     sem_op_out[1].sem_num = sem_full;
     sem_op_out[1].sem_flg = 0;

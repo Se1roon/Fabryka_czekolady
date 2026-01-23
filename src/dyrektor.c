@@ -13,6 +13,7 @@ static Magazine *magazine;
 
 static pthread_t process_manager;
 static pid_t child_processes[7];
+static pid_t processes_waited[7] = {false};
 
 static bool magazine_active = true;
 static bool workerX_active = true;
@@ -280,11 +281,21 @@ void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
         struct sembuf magazine_unlock = {SEM_MAGAZINE, 1, 0};
 
         if (magazine_active) {
-            semop(sem_id, &magazine_lock, 1);
+            while (semop(sem_id, &magazine_lock, 1) == -1) {
+				if (errno != EINTR) {
+					send_log(msg_id, "%s[Director] Failed to lock the magazine! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+					return;
+				}
+			}
             send_log(msg_id, "%s[Director] Magazine Stopped!%s", WARNING_CLR_SET, CLR_RST);
             magazine_active = false;
-        } else {
-            semop(sem_id, &magazine_unlock, 1);
+		} else {
+            while (semop(sem_id, &magazine_unlock, 1) == -1) {
+				if (errno != EINTR) {
+					send_log(msg_id, "%s[Director] Failed to unlock the magazine! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+					return;
+				}
+			}
             send_log(msg_id, "%s[Director] Magazine Activated!%s", WARNING_CLR_SET, CLR_RST);
             magazine_active = true;
         }
@@ -309,7 +320,7 @@ void clean_up_CHILDREN(pid_t *child_processes, int count, bool force) {
         pthread_join(process_manager, NULL);
 
         for (int i = count - 1; i >= 1; i--) {
-            if (child_processes[i] == 0)
+            if (child_processes[i] == 0 || processes_waited[i])
                 continue;
             kill(child_processes[i], SIGINT);
         }
@@ -317,7 +328,7 @@ void clean_up_CHILDREN(pid_t *child_processes, int count, bool force) {
 
     for (int i = count - 1; i >= 1; i--) {
         pid_t child_pid = child_processes[i];
-        if (child_pid == 0)
+        if (child_pid == 0 || processes_waited[i])
             continue;
 
         int status = -1;
@@ -375,13 +386,13 @@ void *manage_processes(void *arg) {
     pid_t p_pid;
     int collected = 0;
     while (collected < 6) { // Doesn't wait for logger
-        if ((p_pid = waitpid(-1, &p_status, WNOHANG)) > 0) {
+        if ((p_pid = waitpid(-1, &p_status, 0)) > 0) {
             send_log(msg_id, "%s[Process Manager] Successfully collected process %d (exit code %d)!%s", INFO_CLR_SET, p_pid, p_status, CLR_RST);
             collected++;
 
             for (int i = 0; i < 7; i++) {
                 if (child_processes[i] == p_pid) {
-                    child_processes[i] = 0;
+                    processes_waited[i] = true;
                     break;
                 }
             }

@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
             sem_op_in[2].sem_flg = 0;
             sem_op_in[3].sem_num = SEM_MAGAZINE;
             sem_op_in[3].sem_op = -1;
-            sem_op_in[3].sem_flg = 0;
+            sem_op_in[3].sem_flg = SEM_UNDO;
 
             while (semop(sem_id, sem_op_in, 4) == -1) {
                 if (errno != EINTR) {
@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
             struct sembuf sem_op_out[4];
             sem_op_out[0].sem_num = SEM_MAGAZINE;
             sem_op_out[0].sem_op = 1;
-            sem_op_out[0].sem_flg = 0;
+            sem_op_out[0].sem_flg = SEM_UNDO;
             sem_op_out[1].sem_num = SEM_EMPTY_A;
             sem_op_out[1].sem_op = 1;
             sem_op_out[1].sem_flg = 0;
@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
             sem_op_in[2].sem_flg = 0;
             sem_op_in[3].sem_num = SEM_MAGAZINE;
             sem_op_in[3].sem_op = -1;
-            sem_op_in[3].sem_flg = 0;
+            sem_op_in[3].sem_flg = SEM_UNDO;
 
             while (semop(sem_id, sem_op_in, 4) == -1) {
                 if (errno != EINTR) {
@@ -227,7 +227,7 @@ int main(int argc, char *argv[]) {
             struct sembuf sem_op_out[4];
             sem_op_out[0].sem_num = SEM_MAGAZINE;
             sem_op_out[0].sem_op = 1;
-            sem_op_out[0].sem_flg = 0;
+            sem_op_out[0].sem_flg = SEM_UNDO;
             sem_op_out[1].sem_num = SEM_EMPTY_A;
             sem_op_out[1].sem_op = 1;
             sem_op_out[1].sem_flg = 0;
