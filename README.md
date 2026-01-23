@@ -3,7 +3,7 @@
 | Parametr | Wartość |
 |----------|---------|
 | Operating System | CachyOS (Arch Linux) |
-| Kernel | Linux 6.18.3-2-cachyos |
+| Kernel | Linux 6.18.6-2-cachyos |
 | Architecture | x86-64 |
 | Kompilator | clang 21.1.6 |
 
@@ -21,7 +21,7 @@ make
 **Modyfikowanie działania programu**
 
 Możliwe jest modyfikowanie ilości czekolady jaką fabryka ma wygenerować.
-Aby to zrobić należy zmienić wartości zmiennych w pliku **include/common.h** (linie 35,36)
+Aby to zrobić należy zmienić wartości zmiennych w pliku [common.h](include/common.h#L35)
 ```
 // Change these
 #define X_TYPE_TO_PRODUCE 100
@@ -47,7 +47,7 @@ Przy czym zakładamy, że każdy składnik zajmuje określoną ilość miejsca w
 - C - 2 jednostki
 - D - 3 jednostki
 
-## Architektura Programu
+## Architektura i opis działania programu
 | Proces | Plik źródłowy | Opis |
 |--------|---------------|------|
 | **dyrektor** | `src/dyrektor.c` | Proces główny - Dyrektor |
@@ -56,30 +56,31 @@ Przy czym zakładamy, że każdy składnik zajmuje określoną ilość miejsca w
 | **logger** | `src/logger.c` | Proces odpowiedzialny za logowanie działań Fabryki |
 
 **Dyrektor**
-- Wczytuje zapisany stan magazynu jeżeli taki istnieje.
-- Uruchamia fabrykę
-- Posiada dodatkowy wątek, upewniający się, że fabryka zakończyła pracę.
-- Po otrzymaniu powiadomienia od Pracownika, zatrzymuje dostawę określonego składnika/ów
+Program rozpoczyna się od sprawdzenia wartości ustawianych przez użytkownika (`X_TYPE_TO_PRODUCE`, `Y_TYPE_TO_PRODUCE`, `MAGAZINE_CAPACITY`). Następnie *Dyrektor* przypisuje funkcję `signal_handler()` do obsługi sygnałów `SIGINT`, `SIGUSR1`, `SIGUSR2`, `SIGTERM` oraz inicjuje struktury komunikacji IPC. Kolejnym krokiem w pracy dyrektora jest przywrócenie stanu magazynu jeżeli takowy zapis istnieje. Potem uruchamia wątek odpowiedzialny za zbieranie umarłych procesów oraz startuje procesy dostawców i pracowników.
 
-**Dostawca**
-- Posiada określony typ składnika jaki dostarcza
-- Sprawdza czy może wejść do magazynu
-    - Jeśli TAK, szuka wolnego miejsca na swój składnik (jeżeli go nie znajdzie, wychodzi)
-    - Jeśli NIE, czeka przed bramą
+Sygnały, na które reaguje dyrektor:
+- `SIGINT`: Zatrzymuje pracę fabryki. Zapisuje stan magazynu, zabija dzieci, zwalnia struktury IPC.
+- `SIGTERM`: Zmienia stan magazynu. Magazyn może być nieaktywny bądź aktywny, sygnał ten służu do zmiany jego stanu.
+- `SIGUSR1`: Wstrzymuje dostawy niepotrzebnych składników. Sygnał ten jest wysyłany przez pracowników, którzy skończyli swoją pracę.
+- `SIGUSR2`: Oznacza atak terrorystyczny, zatrzymuje pracę fabryki. Sygnał wysyłany przez procesy potomne, kiedy otrzymają zewnętrzny sygnał `SIGTERM`.
 
-**Pracownik**
-- Posiada określony typ czekolady jaki ma produkować
-- Sprawdza czy magazyn jest wolny
-    - Jeśli TAK, stara się znaleźć potrzebne mu składniki
-        - Jeżeli mu się uda, produkuje czekoladę, dodatkowo sprawdzając czy wyprodukował już wystarczająco
-            - Jeśli TAK, wysyła powiadomienie do dyrektora, z prośbą o zaprzestanie dostaw specyficznego dla jego rodzaju czekolady składnika.
-            - Jeśli NIE, produkuje dalej
-        - Jeżeli mu się nie uda, opuszcza magazyn
-    - Jeśli NIE, czeka
+**Dostawcy**
+Każdy proces dostawcy jako argument otrzymuje typ składnika jaki ma dostarczać. Następnie na podstawie tego składnika, oblicza przestrzeń magazynu przeznaczoną dla niego. Potem, sprawdza czy w tej przestrzeni jest w ogóle miejsce na składnik, jeżeli jest to czeka aż będzie miał możliwość wejścia do magazynu (obie te operacje są operacjami semaforowymi, ).
+
+Sygnały, na które reaguje dostawca:
+- `SIGINT`: Kończy pracę dostawcy. Jeżeli jakiś dostawca jest już w drodze, bądź czeka przy magazynie to jest on jeszcze obsługiwany. Za to nie nadchodzą juz kolejne dostawy.
+- `SIGTERM`: Atak terrorystyczny, powiadamia dyrektora.
+
+**Pracownicy**
+Pracownik, podobnie jak dostawca, przy wywołaniu otrzymuje typ czekolady jaki ma produkować. Następnie sprawdza czy zostały dostarczone składniki potrzebne mu do produkcji, jeżeli tak to czeka na dostęp do magazynu. Gdy pracownik wykryje, że zostało wyprodukowane już wystarczająco czekolady, to wyśle sygnał do dyrektora po czym zakończy pracę.
+
+Sygnały, na które reaguje pracownik:
+- `SIGINT`: Kończy pracę pracownika. Podobnie jak z dostawcą, jak coś już jest w trakcie produkcji, to się wyprodukuje.
+- `SIGTERM`: Atak terrorystyczny, powiadamia dyrektora.
 
 **Logger**
-- Każdy proces wysyła do niego akcję, którą właśnie wykonał
-- Wyświetla to co zostanie do niego przesłane
+Każdy z poprzednio opisanych procesów, wysyła swoje komunikaty na kolejke komunikatów. Proces loggera odbiera te komunikaty i wypisuje je zarówno na *STDOUT* jak i do pliku *simulation.log*
+
 
 ## Komunikacja IPC
 **Pamięć Dzielona - serce Fabryki, magazyn**
