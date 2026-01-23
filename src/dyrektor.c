@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include "../include/common.h"
 
@@ -15,11 +16,11 @@ static pthread_t process_manager;
 static pid_t child_processes[7];
 static pid_t processes_waited[7] = {false};
 
+static bool factory_active = true;
 static bool magazine_active = true;
 static bool workerX_active = true;
 static bool workerY_active = true;
 
-static void signal_handler(int sig_num, siginfo_t *sig_info, void *data);
 void *manage_processes(void *arg);
 
 int restore_state();
@@ -27,38 +28,34 @@ void save_state();
 void clean_up_IPC();
 void clean_up_CHILDREN(pid_t *child_processes, int count, bool force);
 
+void unblock_signals_for_child() {
+	sigset_t set;
+	sigemptyset(&set);
+	sigprocmask(SIG_SETMASK, &set, NULL);
+}
+
 
 int main() {
     if (X_TYPE_TO_PRODUCE < 0 || Y_TYPE_TO_PRODUCE < 0) {
         fprintf(stderr, "%sInvalid amount of chocolate to produce (must be >= 0)%s", ERROR_CLR_SET, CLR_RST);
         return 0;
     }
-    if (MAGAZINE_CAPACITY > 50000) {
+    if (MAGAZINE_CAPACITY > 30000) {
         fprintf(stderr, "%sDangerous total capacity of the magazine%s", ERROR_CLR_SET, CLR_RST);
         return 0;
     }
 
-    struct sigaction sa;
-    sa.sa_sigaction = signal_handler;
-    sa.sa_flags = SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
+	sigset_t mask;
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGTERM);
+	sigaddset(&mask, SIGUSR1);
+	sigaddset(&mask, SIGUSR2);
 
-    if (sigaction(SIGINT, &sa, NULL) == -1) {
-        fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGINT! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
-        return -1;
-    }
-    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGUSR1! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
-        return -1;
-    }
-    if (sigaction(SIGUSR2, &sa, NULL) == -1) {
-        fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGUSR2! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
-        return -1;
-    }
-    if (sigaction(SIGTERM, &sa, NULL) == -1) {
-        fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGTERM! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
-        return -1;
-    }
+	if (pthread_sigmask(SIG_BLOCK, &mask, NULL) != 0) {
+		fprintf(stderr, "%s[Director] Cannot block signals%s", ERROR_CLR_SET, CLR_RST);
+		return -1;
+	}
 
     key_t ipc_key = ftok(".", IPC_KEY_ID);
     if (ipc_key == -1) {
@@ -132,15 +129,6 @@ int main() {
     send_log(msg_id, "%s[Director] Amount of chocolate produced so far:\n\tX = %d\n\tY = %d%s",
              INFO_CLR_SET, magazine->typeX_produced, magazine->typeY_produced, CLR_RST);
 
-    send_log(msg_id, "%s[Director] Creating thread for managing processes...%s", INFO_CLR_SET, CLR_RST);
-
-    if ((errno = pthread_create(&process_manager, NULL, manage_processes, NULL)) != 0) {
-        send_log(msg_id, "%s[Director] Failed to create thread for process management! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
-        clean_up_IPC();
-        return -1;
-    }
-
-    send_log(msg_id, "%s[Director] Process Management thread launched successfully!%s", INFO_CLR_SET, CLR_RST);
 
     send_log(msg_id, "%s[Director] Spawning child processes...%s", INFO_CLR_SET, CLR_RST);
 
@@ -152,6 +140,7 @@ int main() {
         return -1;
     }
     if (logger_pid == 0) {
+		unblock_signals_for_child();
         execl("./bin/logger", "./bin/logger", NULL);
         send_log(msg_id, "%s[Director] Failed to start Logger process! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
         clean_up_IPC();
@@ -175,6 +164,7 @@ int main() {
             char arg[2];
             arg[0] = component;
             arg[1] = 0;
+			unblock_signals_for_child();
             execl("./bin/dostawca", "./bin/dostawca", arg, NULL);
             send_log(msg_id, "%s[Director] Failed to start Supplier %c process! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
 
@@ -199,6 +189,7 @@ int main() {
             char arg[2];
             arg[0] = worker_type;
             arg[1] = 0;
+			unblock_signals_for_child();
             execl("./bin/pracownik", "./bin/pracownik", arg, NULL);
             send_log(msg_id, "%s[Director] Failed to start Worker %c process! (%s)%s", ERROR_CLR_SET, worker_type, strerror(errno), CLR_RST);
 
@@ -209,9 +200,105 @@ int main() {
         child_processes[children_count++] = worker_pid;
     }
 
-    send_log(msg_id, "%s[Director] Spawned child processes!%s", INFO_CLR_SET, CLR_RST);
+    send_log(msg_id, "%s[Director] Spawned child processes! Starting process manager thread%s", INFO_CLR_SET, CLR_RST);
+
+    if ((errno = pthread_create(&process_manager, NULL, manage_processes, NULL)) != 0) {
+        send_log(msg_id, "%s[Director] Failed to create thread for process management! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        clean_up_IPC();
+        return -1;
+    }
+
+    send_log(msg_id, "%s[Director] Process Management thread launched successfully!%s", INFO_CLR_SET, CLR_RST);
 
     send_log(msg_id, "%s[Director] Waiting for Factory to finish work!%s", INFO_CLR_SET, CLR_RST);
+
+	struct timespec timeout;
+	siginfo_t info;
+
+	while (factory_active) {
+		timeout.tv_sec = 0;
+		timeout.tv_nsec = 100000000;
+
+		int sig = sigtimedwait(&mask, &info, &timeout);
+
+		if (sig > 0) {
+			if (sig == SIGINT) {
+				send_log(msg_id, "%s[Director] Received SIGINT | Shutting down%s", INFO_CLR_SET, CLR_RST);
+				save_state();
+				clean_up_CHILDREN(child_processes, 7, true);
+				clean_up_IPC();
+				exit(0);
+
+			} else if (sig == SIGUSR1) {
+				if (info.si_pid == child_processes[5]) {
+					// source is Worker X -> X Production is done
+					if (!workerY_active) {
+						send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
+						kill(child_processes[1], SIGINT);
+						send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
+						kill(child_processes[2], SIGINT);
+					}
+					send_log(msg_id, "%s[Director] Stopping C deliveries!%s", WARNING_CLR_SET, CLR_RST);
+					kill(child_processes[3], SIGINT);
+					workerX_active = false;
+
+				} else if (info.si_pid == child_processes[6]) {
+					// source is Worker Y -> Y Production is done
+					if (!workerX_active) {
+						send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
+						kill(child_processes[1], SIGINT);
+						send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
+						kill(child_processes[2], SIGINT);
+					}
+					send_log(msg_id, "%s[Director] Stopping D deliveries!%s", WARNING_CLR_SET, CLR_RST);
+					kill(child_processes[4], SIGINT);
+					workerY_active = false;
+
+				}
+			} else if (sig == SIGUSR2) {
+				send_log(msg_id, "%s[Director] Received SIGUSR2... A terrorist attack detected!%s", ERROR_CLR_SET, CLR_RST);
+				save_state();
+				clean_up_CHILDREN(child_processes, 7, true);
+				clean_up_IPC();
+				exit(0);
+
+			} else if (sig == SIGTERM) {
+				send_log(msg_id, "%s[Director] Received SIGTERM... %s Magazine!%s",
+						 INFO_CLR_SET, (magazine_active) ? "Stopping" : "Activating", CLR_RST);
+
+				struct sembuf magazine_lock = {SEM_MAGAZINE, -1, SEM_UNDO};
+				struct sembuf magazine_unlock = {SEM_MAGAZINE, 1, SEM_UNDO};
+				bool lock_acquired = true;
+
+				if (magazine_active) {
+					while (semop(sem_id, &magazine_lock, 1) == -1) {
+						if (errno != EINTR) {
+							send_log(msg_id, "%s[Director] Failed to lock the magazine! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+							lock_acquired = false;
+							break;
+						}
+					}
+					if (lock_acquired) {
+						send_log(msg_id, "%s[Director] Magazine Stopped!%s", WARNING_CLR_SET, CLR_RST);
+						magazine_active = false;
+					}
+
+				} else {
+					while (semop(sem_id, &magazine_unlock, 1) == -1) {
+						if (errno != EINTR) {
+							send_log(msg_id, "%s[Director] Failed to unlock the magazine! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+							lock_acquired = false;
+							break;
+						}
+					}
+					if (lock_acquired) {
+						send_log(msg_id, "%s[Director] Magazine Activated!%s", WARNING_CLR_SET, CLR_RST);
+						magazine_active = true;
+					}
+				}
+			}
+		}
+	}
 
     if ((errno = pthread_join(process_manager, NULL)) != 0) {
         send_log(msg_id, "%s[Director] Failed to wait for child processes! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
@@ -237,70 +324,6 @@ int main() {
     return 0;
 }
 
-void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
-    if (sig_num == SIGINT) {
-        send_log(msg_id, "%s[Director] Received SIGINT%s", INFO_CLR_SET, CLR_RST);
-        save_state();
-        clean_up_CHILDREN(child_processes, 7, true);
-        clean_up_IPC();
-        exit(0);
-    } else if (sig_num == SIGUSR1) {
-        if (sig_info->si_pid == child_processes[5]) {
-            // source is Worker X -> X Production is done
-            if (!workerY_active) {
-                send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                kill(child_processes[1], SIGINT);
-                send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                kill(child_processes[2], SIGINT);
-            }
-            send_log(msg_id, "%s[Director] Stopping C deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[3], SIGINT);
-            workerX_active = false;
-        } else if (sig_info->si_pid == child_processes[6]) {
-            // source is Worker Y -> Y Production is done
-            if (!workerX_active) {
-                send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                kill(child_processes[1], SIGINT);
-                send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                kill(child_processes[2], SIGINT);
-            }
-            send_log(msg_id, "%s[Director] Stopping D deliveries!%s", WARNING_CLR_SET, CLR_RST);
-            kill(child_processes[4], SIGINT);
-            workerY_active = false;
-        }
-    } else if (sig_num == SIGUSR2) {
-        send_log(msg_id, "%s[Director] Received SIGUSR2... A terrorist attack detected!%s", ERROR_CLR_SET, CLR_RST);
-        save_state();
-        clean_up_CHILDREN(child_processes, 7, true);
-        clean_up_IPC();
-        exit(0);
-    } else if (sig_num == SIGTERM) {
-        send_log(msg_id, "%s[Director] Received SIGTERM... %s Magazine!%s",
-                 INFO_CLR_SET, (magazine_active) ? "Stopping" : "Activating", CLR_RST);
-        struct sembuf magazine_lock = {SEM_MAGAZINE, -1, 0};
-        struct sembuf magazine_unlock = {SEM_MAGAZINE, 1, 0};
-
-        if (magazine_active) {
-            while (semop(sem_id, &magazine_lock, 1) == -1) {
-				if (errno != EINTR) {
-					send_log(msg_id, "%s[Director] Failed to lock the magazine! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
-					return;
-				}
-			}
-            send_log(msg_id, "%s[Director] Magazine Stopped!%s", WARNING_CLR_SET, CLR_RST);
-            magazine_active = false;
-		} else {
-            while (semop(sem_id, &magazine_unlock, 1) == -1) {
-				if (errno != EINTR) {
-					send_log(msg_id, "%s[Director] Failed to unlock the magazine! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
-					return;
-				}
-			}
-            send_log(msg_id, "%s[Director] Magazine Activated!%s", WARNING_CLR_SET, CLR_RST);
-            magazine_active = true;
-        }
-    }
-}
 
 void clean_up_IPC() {
     printf("%s[Director] Amount of chocolate produced:\n\tX = %d\n\tY = %d\n%s", INFO_CLR_SET, magazine->typeX_produced, magazine->typeY_produced, CLR_RST);
@@ -396,8 +419,13 @@ void *manage_processes(void *arg) {
                     break;
                 }
             }
-        }
+        } else {
+			if (errno == ECHILD)
+				break;
+		}
     }
+
+	factory_active = false;
 
     return NULL;
 }
