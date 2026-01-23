@@ -3,10 +3,7 @@
 
 #include "../include/common.h"
 
-// TODO: When chocolate produced from saved state < chocolate to produce
-//		 DO NOT reset it but use it as a starting point
-// TODO: Print the restored state (typeX_produced, typeX_produced). Also print at the end of simulation how much produced
-// TODO: Handle SIGTERM in Director, and block/release the Magazine semaphore on it (depending on previous state)
+// TODO: Move colors to logger and send the color code as a parameter
 // TODO: Documentation & Tests
 
 static int shm_id = -1;
@@ -17,19 +14,29 @@ static Magazine *magazine;
 static pthread_t process_manager;
 static pid_t child_processes[7];
 
+static bool magazine_active = true;
 static bool workerX_active = true;
 static bool workerY_active = true;
 
 static void signal_handler(int sig_num, siginfo_t *sig_info, void *data);
 void *manage_processes(void *arg);
 
-void restore_state();
+int restore_state();
 void save_state();
 void clean_up_IPC();
 void clean_up_CHILDREN(pid_t *child_processes, int count, bool force);
 
 
 int main() {
+    if (X_TYPE_TO_PRODUCE < 0 || Y_TYPE_TO_PRODUCE < 0) {
+        fprintf(stderr, "%sInvalid amount of chocolate to produce (must be >= 0)%s", ERROR_CLR_SET, CLR_RST);
+        return 0;
+    }
+    if (MAGAZINE_CAPACITY > 50000) {
+        fprintf(stderr, "%sDangerous total capacity of the magazine%s", ERROR_CLR_SET, CLR_RST);
+        return 0;
+    }
+
     struct sigaction sa;
     sa.sa_sigaction = signal_handler;
     sa.sa_flags = SA_SIGINFO;
@@ -45,6 +52,10 @@ int main() {
     }
     if (sigaction(SIGUSR2, &sa, NULL) == -1) {
         fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGUSR2! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
+        return -1;
+    }
+    if (sigaction(SIGTERM, &sa, NULL) == -1) {
+        fprintf(stderr, "%s[Director] Failed to assign signal handler to SIGTERM! (%s)%s\n", ERROR_CLR_SET, strerror(errno), CLR_RST);
         return -1;
     }
 
@@ -104,9 +115,22 @@ int main() {
     send_log(msg_id, "%s[Director] IPC Resources created!%s", INFO_CLR_SET, CLR_RST);
 
     send_log(msg_id, "%s[Director] Restoring magazine state...%s", INFO_CLR_SET, CLR_RST);
-    restore_state();
-    magazine->typeX_produced = 0;
-    magazine->typeY_produced = 0;
+
+    if (restore_state() != 0)
+        send_log(msg_id, "%s[Director] Failed to restore magazine state! Starting from nothing%s", WARNING_CLR_SET, CLR_RST);
+
+    // If the simulation was stopped (due to a terrorist attack for example)
+    // restore the amount of chocolate that has been produced so far.
+    // If the number of chocolate produced is less than the desired amount
+    // it is probably a different simulation so reset it.
+    printf("%d\n", magazine->typeX_produced);
+    if (magazine->typeX_produced >= X_TYPE_TO_PRODUCE)
+        magazine->typeX_produced = 0;
+    if (magazine->typeY_produced >= Y_TYPE_TO_PRODUCE)
+        magazine->typeY_produced = 0;
+
+    send_log(msg_id, "%s[Director] Amount of chocolate produced so far:\n\tX = %d\n\tY = %d%s",
+             INFO_CLR_SET, magazine->typeX_produced, magazine->typeY_produced, CLR_RST);
 
     send_log(msg_id, "%s[Director] Creating thread for managing processes...%s", INFO_CLR_SET, CLR_RST);
 
@@ -246,13 +270,30 @@ void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
         }
     } else if (sig_num == SIGUSR2) {
         send_log(msg_id, "%s[Director] Received SIGUSR2... A terrorist attack detected!%s", ERROR_CLR_SET, CLR_RST);
+        save_state();
         clean_up_CHILDREN(child_processes, 7, true);
         clean_up_IPC();
         exit(0);
+    } else if (sig_num == SIGTERM) {
+        send_log(msg_id, "%s[Director] Received SIGTERM... %s Magazine!%s",
+                 INFO_CLR_SET, (magazine_active) ? "Stopping" : "Activating", CLR_RST);
+        struct sembuf magazine_lock = {SEM_MAGAZINE, -1, 0};
+        struct sembuf magazine_unlock = {SEM_MAGAZINE, 1, 0};
+
+        if (magazine_active) {
+            semop(sem_id, &magazine_lock, 1);
+            send_log(msg_id, "%s[Director] Magazine Stopped!%s", WARNING_CLR_SET, CLR_RST);
+            magazine_active = false;
+        } else {
+            semop(sem_id, &magazine_unlock, 1);
+            send_log(msg_id, "%s[Director] Magazine Activated!%s", WARNING_CLR_SET, CLR_RST);
+            magazine_active = true;
+        }
     }
 }
 
 void clean_up_IPC() {
+    printf("%s[Director] Amount of chocolate produced:\n\tX = %d\n\tY = %d\n%s", INFO_CLR_SET, magazine->typeX_produced, magazine->typeY_produced, CLR_RST);
     if (shm_id != -1)
         shmctl(shm_id, IPC_RMID, NULL);
     if (sem_id != -1)
@@ -260,7 +301,7 @@ void clean_up_IPC() {
     if (msg_id != -1)
         msgctl(msg_id, IPC_RMID, NULL);
 
-    printf("\n%s[Director] IPC cleaned up.%s\n", INFO_CLR_SET, CLR_RST);
+    printf("%s[Director] IPC cleaned up.%s\n", INFO_CLR_SET, CLR_RST);
 }
 
 void clean_up_CHILDREN(pid_t *child_processes, int count, bool force) {
@@ -304,14 +345,20 @@ void clean_up_CHILDREN(pid_t *child_processes, int count, bool force) {
     }
 }
 
-void restore_state() {
-    FILE *f = fopen("magazine.bin", "r");
+int restore_state() {
+    FILE *f = fopen("magazine.bin", "rb");
     if (f) {
-        fwrite(magazine, sizeof(Magazine), 1, f);
+        if (fread(magazine, sizeof(Magazine), 1, f) != 1) {
+            send_log(msg_id, "%s[Director] Failed to read magazine.bin! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+            fclose(f);
+            return -1;
+        }
         fclose(f);
         send_log(msg_id, "%s[Director] Restored magazine state!%s", INFO_CLR_SET, CLR_RST);
     } else
         send_log(msg_id, "%s[Director] magazine.bin file not found. Nothing to restore from.%s", WARNING_CLR_SET, CLR_RST);
+
+    return 0;
 }
 
 void save_state() {

@@ -99,41 +99,42 @@ int main(int argc, char *argv[]) {
             if (!lock_acquired)
                 break;
 
-            int idx_A = -1;
-            int idx_B = -1;
-            int idx_C = -1;
-
-            // Look for A
-            for (int i = IsA; i <= IkA; i++) {
-                if (magazine->buffer[i] == 'A') {
-                    idx_A = i;
-                    break;
-                }
-            }
-            // Look for B
-            for (int i = IsB; i <= IkB; i++) {
-                if (magazine->buffer[i] == 'B') {
-                    idx_B = i;
-                    break;
-                }
-            }
-            // Look for C
-            for (int i = IsC; i <= IkC; i++) {
-                if (magazine->buffer[i] == 'C') {
-                    idx_C = i;
-                    break;
-                }
-            }
-
-            magazine->buffer[idx_A] = 0;
-            magazine->buffer[idx_B] = 0;
-            magazine->buffer[idx_C] = 0;
-            magazine->typeX_produced++;
-            send_log(msg_id, "%s[Worker: X] PRODUCED chocolate type X!%s", INFO_CLR_SET, CLR_RST);
             if (magazine->typeX_produced >= X_TYPE_TO_PRODUCE) {
                 send_log(msg_id, "%s[Worker: X] PRODUCTION X COMPLETE | Sending notification to Director%s", INFO_CLR_SET, CLR_RST);
                 kill(getppid(), SIGUSR1);
                 is_active = false;
+            } else {
+                int idx_A = -1;
+                int idx_B = -1;
+                int idx_C = -1;
+
+                // Look for A
+                for (int i = IsA; i <= IkA; i++) {
+                    if (magazine->buffer[i] == 'A') {
+                        idx_A = i;
+                        break;
+                    }
+                }
+                // Look for B
+                for (int i = IsB; i <= IkB; i++) {
+                    if (magazine->buffer[i] == 'B') {
+                        idx_B = i;
+                        break;
+                    }
+                }
+                // Look for C
+                for (int i = IsC; i <= IkC; i++) {
+                    if (magazine->buffer[i] == 'C') {
+                        idx_C = i;
+                        break;
+                    }
+                }
+
+                magazine->buffer[idx_A] = 0;
+                magazine->buffer[idx_B] = 0;
+                magazine->buffer[idx_C] = 0;
+                magazine->typeX_produced++;
+                send_log(msg_id, "%s[Worker: X] PRODUCED chocolate type X!%s", INFO_CLR_SET, CLR_RST);
             }
 
             struct sembuf sem_op_out[4];
@@ -185,41 +186,42 @@ int main(int argc, char *argv[]) {
             if (!lock_acquired)
                 break;
 
-            int idx_A = -1;
-            int idx_B = -1;
-            int idx_D = -1;
-
-            // Look for A
-            for (int i = IsA; i <= IkA; i++) {
-                if (magazine->buffer[i] == 'A') {
-                    idx_A = i;
-                    break;
-                }
-            }
-            // Look for B
-            for (int i = IsB; i <= IkB; i++) {
-                if (magazine->buffer[i] == 'B') {
-                    idx_B = i;
-                    break;
-                }
-            }
-            // Look for D
-            for (int i = IsD; i <= IkD; i++) {
-                if (magazine->buffer[i] == 'D') {
-                    idx_D = i;
-                    break;
-                }
-            }
-
-            magazine->buffer[idx_A] = 0;
-            magazine->buffer[idx_B] = 0;
-            magazine->buffer[idx_D] = 0;
-            magazine->typeY_produced++;
-            send_log(msg_id, "%s[Worker: Y] PRODUCED chocolate type Y!%s", INFO_CLR_SET, CLR_RST);
             if (magazine->typeY_produced >= Y_TYPE_TO_PRODUCE) {
                 send_log(msg_id, "%s[Worker: Y] PRODUCTION Y COMPLETE | Sending notification to Director%s", INFO_CLR_SET, CLR_RST);
                 kill(getppid(), SIGUSR1);
                 is_active = false;
+            } else {
+                int idx_A = -1;
+                int idx_B = -1;
+                int idx_D = -1;
+
+                // Look for A
+                for (int i = IsA; i <= IkA; i++) {
+                    if (magazine->buffer[i] == 'A') {
+                        idx_A = i;
+                        break;
+                    }
+                }
+                // Look for B
+                for (int i = IsB; i <= IkB; i++) {
+                    if (magazine->buffer[i] == 'B') {
+                        idx_B = i;
+                        break;
+                    }
+                }
+                // Look for D
+                for (int i = IsD; i <= IkD; i++) {
+                    if (magazine->buffer[i] == 'D') {
+                        idx_D = i;
+                        break;
+                    }
+                }
+
+                magazine->buffer[idx_A] = 0;
+                magazine->buffer[idx_B] = 0;
+                magazine->buffer[idx_D] = 0;
+                magazine->typeY_produced++;
+                send_log(msg_id, "%s[Worker: Y] PRODUCED chocolate type Y!%s", INFO_CLR_SET, CLR_RST);
             }
 
             struct sembuf sem_op_out[4];
@@ -242,10 +244,10 @@ int main(int argc, char *argv[]) {
                     exit(-1);
                 }
             }
-            sleep(2);
         }
     }
 
+    send_log(msg_id, "%s[Worker: %c] Terminating%s", INFO_CLR_SET, worker_type, CLR_RST);
     shmdt(magazine);
     return 0;
 }
