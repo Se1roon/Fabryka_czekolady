@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    int sem_id = semget(ipc_key, 5, IPC_CREAT | 0600);
+    int sem_id = semget(ipc_key, 9, IPC_CREAT | 0600);
     if (sem_id == -1) {
         fprintf(stderr, "%s[Supplier: %c] Failed to join the Semaphore Set! (%s)%s\n", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
         return -1;

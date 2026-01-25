@@ -56,22 +56,25 @@ Przy czym zakładamy, że każdy składnik zajmuje określoną ilość miejsca w
 | **logger** | `src/logger.c` | Proces odpowiedzialny za logowanie działań Fabryki |
 
 **Dyrektor**
-Program rozpoczyna się od sprawdzenia wartości ustawianych przez użytkownika (`X_TYPE_TO_PRODUCE`, `Y_TYPE_TO_PRODUCE`, `MAGAZINE_CAPACITY`). Następnie *Dyrektor* przypisuje funkcję `signal_handler()` do obsługi sygnałów `SIGINT`, `SIGUSR1`, `SIGUSR2`, `SIGTERM` oraz inicjuje struktury komunikacji IPC. Kolejnym krokiem w pracy dyrektora jest przywrócenie stanu magazynu jeżeli takowy zapis istnieje. Potem uruchamia wątek odpowiedzialny za zbieranie umarłych procesów oraz startuje procesy dostawców i pracowników.
+
+Program rozpoczyna się od sprawdzenia wartości ustawianych przez użytkownika (`X_TYPE_TO_PRODUCE`, `Y_TYPE_TO_PRODUCE`, `MAGAZINE_CAPACITY`). Następnie dyrektor inicjuje struktury komunikacji IPC. Kolejnym krokiem w pracy dyrektora jest przywrócenie stanu magazynu jeżeli takowy zapis istnieje, stworzenie procesów dostawców i pracowników, oraz stworzenie wątki odpowiedzialnego za zbieranie martwych procesów.
 
 Sygnały, na które reaguje dyrektor:
 - `SIGINT`: Zatrzymuje pracę fabryki. Zapisuje stan magazynu, zabija dzieci, zwalnia struktury IPC.
-- `SIGTERM`: Zmienia stan magazynu. Magazyn może być nieaktywny bądź aktywny, sygnał ten służu do zmiany jego stanu.
+- `SIGTERM`: Zmienia stan magazynu. Magazyn może być nieaktywny bądź aktywny, sygnał ten służy do zmiany jego stanu.
 - `SIGUSR1`: Wstrzymuje dostawy niepotrzebnych składników. Sygnał ten jest wysyłany przez pracowników, którzy skończyli swoją pracę.
 - `SIGUSR2`: Oznacza atak terrorystyczny, zatrzymuje pracę fabryki. Sygnał wysyłany przez procesy potomne, kiedy otrzymają zewnętrzny sygnał `SIGTERM`.
 
 **Dostawcy**
-Każdy proces dostawcy jako argument otrzymuje typ składnika jaki ma dostarczać. Następnie na podstawie tego składnika, oblicza przestrzeń magazynu przeznaczoną dla niego. Potem, sprawdza czy w tej przestrzeni jest w ogóle miejsce na składnik, jeżeli jest to czeka aż będzie miał możliwość wejścia do magazynu (obie te operacje są operacjami semaforowymi, ).
+
+Każdy proces dostawcy jako argument otrzymuje typ składnika jaki ma dostarczać. Następnie na podstawie tego składnika, oblicza przestrzeń magazynu przeznaczoną dla niego. Potem, sprawdza czy w tej przestrzeni jest w ogóle miejsce na składnik, jeżeli jest to czeka aż będzie miał możliwość wejścia do magazynu (obie te operacje są operacjami semaforowymi).
 
 Sygnały, na które reaguje dostawca:
 - `SIGINT`: Kończy pracę dostawcy. Jeżeli jakiś dostawca jest już w drodze, bądź czeka przy magazynie to jest on jeszcze obsługiwany. Za to nie nadchodzą juz kolejne dostawy.
 - `SIGTERM`: Atak terrorystyczny, powiadamia dyrektora.
 
 **Pracownicy**
+
 Pracownik, podobnie jak dostawca, przy wywołaniu otrzymuje typ czekolady jaki ma produkować. Następnie sprawdza czy zostały dostarczone składniki potrzebne mu do produkcji, jeżeli tak to czeka na dostęp do magazynu. Gdy pracownik wykryje, że zostało wyprodukowane już wystarczająco czekolady, to wyśle sygnał do dyrektora po czym zakończy pracę.
 
 Sygnały, na które reaguje pracownik:
@@ -79,47 +82,10 @@ Sygnały, na które reaguje pracownik:
 - `SIGTERM`: Atak terrorystyczny, powiadamia dyrektora.
 
 **Logger**
+
 Każdy z poprzednio opisanych procesów, wysyła swoje komunikaty na kolejke komunikatów. Proces loggera odbiera te komunikaty i wypisuje je zarówno na *STDOUT* jak i do pliku *simulation.log*
 
-
-## Komunikacja IPC
-**Pamięć Dzielona - serce Fabryki, magazyn**
-```
-typedef struct {
-    char buffer[MAGAZINE_CAPACITY];
-    int typeX_produced;
-    int typeY_produced;
-} Magazine;
-```
-[Definicja w include/common.h](include/common.h)
-
-**Semafor**
-| Wartość początkowa | Zastosowanie |
-|--------------------|--------------|
-| 1 | Synchronizacja dostępu do magazynu |
-
-[Użycie w procesie Pracownik](src/pracownik.c#L63)
-
-[Użycie w procesie Dostawca](src/dostawca.c#L68)
-
-**Kolejka komunikatów**
-
-Używana jest w procesie logowania działań Fabryki. Posiada tylko jeden typ wiadomości:
-```
-typedef struct {
-    long mtype;
-    char text[256];
-} LogMsg;
-
-```
-[Definicja w include/common.h](include/common.h#L67)
-
-## Obsługa błędów
-Wszystkie kluczowe funkcje systemowe są sprawdzane pod kątem ewentualnych błędów. Gdy takowy zostanie wykryty następuje wysłanie wiadomości na kolejke komunikatów, oraz (jeśli konieczne) zakończenie działania Fabryki (wyczyszczenie pamięci i procesów potomnych)
-
-Wiadomość jaka ma zostać wyświetlona jest tworzona przy użyciu funkcji `fprintf()` oraz `strerror()`.
-
-## Działanie Symulacji
+## Stałe używane w programie
 
 | Stała | Wartość |  Opis |
 |-------|---------|-------|
@@ -133,7 +99,7 @@ Wiadomość jaka ma zostać wyświetlona jest tworzona przy użyciu funkcji `fpr
 | `Y_TYPE_SIZE` | A + B + D | Łączna liczba bajtów potrzebna na składniki do czekolady typu Y |
 | `X_TYPE_TO_PRODUCE` | Modyfikowalne | Ilość czekolady typu X do wyprodukowania |
 | `Y_TYPE_TO_PRODUCE` | Modyfikowalne | Ilość czekolady typu Y do wyprodukowania |
-| `MAGAZINE_CAPACITY` | ilośćX * sizeX + ilośćY * sizeY | Ilość bajtów jaką powinien zajmować magazyn |
+| `MAGAZINE_CAPACITY` | Stała wartość (np. 1000) | Ilość bajtów przeznaczona na magazyn |
 | `COMPONENT_SPACE` | sizeMagazyn / (A + B + C + D) | Ilość bajtów przypadająca na składniki A i B (2x dla C, 3x dla D) |
 | `IsA` | 0 | Indeks startu segmentu składników A w magazynie |
 | `IkA` | `COMPONENT_SPACE` - 1 | Indeks końca segmentu składników A w magazynie |
@@ -144,15 +110,60 @@ Wiadomość jaka ma zostać wyświetlona jest tworzona przy użyciu funkcji `fpr
 | `IsD` | `IkC` + 1 | Indeks startu segmentu składników D w magazynie |
 | `IkD` | `IsD` + (3 * `COMPONENT_SPACE` - 1) | Indeks końca segmentu składników D w magazynie |
 
-**Inicjacja IPC & Odczyt stany magazynu**
+## Komunikacja IPC
+**Pamięć Dzielona - Magazyn**
+```
+typedef struct {
+    char buffer[MAGAZINE_CAPACITY];
+    int typeX_produced;
+    int typeY_produced;
+} Magazine;
+```
+[Definicja w include/common.h](include/common.h#L62)
 
-*Dyrektor* 
-- przypisuje funkcję `signal_handler()` do sygnałów `SIGINT`, `SIGUSR1` oraz `SIGUSR`.
-- Inicjuje mechanizmy IPC (tworzy klucz, pamięć dzieloną, semafor, oraz kolejkę komunikatów). 
-- Inicjuje semafor wartością 1
-- Przywraca stan magazynu, jeżeli takowy zapis istnieje. 
-- Uruchamia wątek śledzący zmiany stanów procesów potomnych.
-- Uruchamia procesy dostawców oraz pracowników.
+- **buffer**: Miejsce przechowywujące składniki, podzielone na odpowiednie segmenty
+- **typeX_produced**: Ilość czekolady typu X jaka została wyprodukowana
+- **typeY_produced**: Ilość czekolady typu Y jaka została wyprodukowana
+
+**Semafory**
+| Nazwa | Wartość początkowa | Zastosowanie |
+|-------|--------------------|--------------|
+| `SEM_MAGAZINE` | 1 | Dostęp do magazynu |
+| `SEM_EMPTY_A`  | `IkA` - `IsA` + 1 | Liczba miejsc dostępnych w segmencie składnika A |
+| `SEM_FULL_A`   | 0 | Liczba składników A dostarczonych (aktualnie w magazynie) |
+| `SEM_EMPTY_B`  | `IkB` - `IsB` + 1 | Liczba miejsc dostępnych w segmencie składnika B |
+| `SEM_FULL_B`   | 0 | Liczba składników B dostarczonych (aktualnie w magazynie) |
+| `SEM_EMPTY_C`  | `IkC` - `IsC` + 1 | Liczba miejsc dostępnych w segmencie składnika C |
+| `SEM_FULL_C`   | 0 | Liczba składników C dostarczonych (aktualnie w magazynie) |
+| `SEM_EMPTY_D`  | `IkD` - `IsD` + 1 | Liczba miejsc dostępnych w segmencie składnika D |
+| `SEM_FULL_D`   | 0 | Liczba składników D dostarczonych (aktualnie w magazynie) |
+
+- Zmniejszenie wartości semaforów `SEM_EMPTY_x` następuje kiedy dostawca dostarcza składnik
+- Zwiększenie wartości semaforów `SEM_EMPTY_x` następuje kiedy pracownik wyprodukował czekoladę 
+- Zmniejszenie wartości semaforów `SEM_FULL_x` następuje gdy pracownik produkuje czekoladę 
+- Zwiększenie wartości semaforów `SEM_FULL_x` następuje gdy dostawca dostarczył składnik
+
+[Użycie w procesie Pracownik](src/pracownik.c#L74)
+[Użycie w procesie Dostawca](src/dostawca.c#L75)
+
+**Kolejka komunikatów**
+
+Używana jest w procesie logowania działań Fabryki. Posiada tylko jeden typ wiadomości:
+```
+typedef struct {
+    long mtype;
+    char text[256];
+} LogMsg;
+
+```
+[Definicja w include/common.h](include/common.h#L101)
+
+[Użycie w funkcji pomocniczej `send_log()`](include/common.h#L117)
+
+## Obsługa błędów
+Wszystkie kluczowe funkcje systemowe są sprawdzane pod kątem ewentualnych błędów. Gdy takowy zostanie wykryty następuje wysłanie wiadomości na kolejke komunikatów, oraz (jeśli konieczne) zakończenie działania Fabryki (wyczyszczenie pamięci i procesów potomnych).
+
+Wiadomość jaka ma zostać wyświetlona jest tworzona przy użyciu funkcji `fprintf()` oraz `strerror()`.
 
 ## Testy
 
@@ -1036,3 +1047,43 @@ Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
 ~/Documents/Studia/SO/Fabryka_czekolady main* 20s
 ❯ 
 ```
+
+## Kluczowe funkcje systemowe użyte w projekcie
+
+- **Obsługa plików**
+    - `fopen()`: [użycie w funkcji `restore_state()` oraz `save_state()`](src/dyrektor.c#L389)
+    - `fwrite()`: [użycie w funckji `save_state()`](src/dyrektor.c#L408)
+    - `fread()`: [użycie w funkcji `restore_state()`](src/dyrektor.c#L391)
+    - `fclose()`: [użycie w funkcji `restore_state()` oraz `save_state()`](src/dyrektor.c#L396)
+
+- **Tworzenie procesów**
+    - `fork()`: [użycie w procesie dyrektora](src/dyrektor.c#L155)
+    - `execl()`: [użycie w procesie dyrektora - technicznie w dziecku](src/dyrektor.c#168)
+    - `waitpid()`: [użycie w wątku process managera](src/dyrektor.c#L425)
+
+- **Tworzenie i obsługa wątków**
+    - `pthread_create()`: [użycie w procesie dyrektora](src/dyrektor.c#L205)
+    - `pthread_join()`: [użycie w procesie dyrektora](src/dyrektor.c#L309)
+
+- **Obsługa sygnałów**
+    - `kill()`: [przykładowe użycie w procesie pracownika](src/pracownik.c#L104)
+    - `sigaction()`: [przykładowe użycie w procesie pracownika](src/pracownik.c#L20)
+    - `sigtimedwait()`: [użycie w procesie dyrektora](src/dyrektor.c#L225)
+
+- **Synchronizacja procesów**
+    - `ftok()`: [użycie w procesie dyrektora](src/dyrektor.c#L60)
+    - `semget()`: [użycie w procesie dyrektora](src/dyrektor.c#L79)
+    - `semctl()`: [użycie w procesie dyrektora](src/dyrektor.c#100)
+    - `semop()`: [użycie w procesie dostawcy](src/dostawca.c#95)
+
+- **Segmenty pamięcie dzielonej**
+    - `shmget()`: [użycie w procesie dyrektora](src/dyrektor.c#L66)
+    - `shmat()`: [użycie w procesie dostawcy](src/dostawca.c#L62)
+    - `shmdt()`: [użycie w procesie pracownika](src/pracownik.c#L251)
+    - `shmctl()`: [użycie w procesie dyrektora][src/dyrektor.c#L338]
+
+- **Kolejki komunikatów**
+    - `msgget()`: [użycie w procesie dyrektora](src/dyrektor.c#L106)
+    - `msgsnd()`: [użycie w funkcji `send_log()`](include/common.h#L117)
+    - `msgrcv()`: [użycie w procesie loggera](src/logger.c#L49)
+    - `msgctl()`: [użycie w procesie loggera](src/logger.c#L61)
