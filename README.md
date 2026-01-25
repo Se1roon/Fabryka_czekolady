@@ -144,6 +144,7 @@ typedef struct {
 - Zwiększenie wartości semaforów `SEM_FULL_x` następuje gdy dostawca dostarczył składnik
 
 [Użycie w procesie Pracownik](src/pracownik.c#L74)
+
 [Użycie w procesie Dostawca](src/dostawca.c#L75)
 
 **Kolejka komunikatów**
@@ -618,6 +619,7 @@ Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
 |-------|---------|
 | `X_TO_PRODUCE` | 100000 |
 | `Y_TO_PRODUCE` | 200000 |
+
 *Te wartości nie powinny się zmienić podczas drugiej egzekucji programu*
 
 *1 wywołanie programu*
@@ -781,6 +783,7 @@ Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
 |-------|---------|
 | `X_TO_PRODUCE` | 10 |
 | `Y_TO_PRODUCE` | 3 |
+
 *Po wyprodukowaniu Y proces pracownika jest usypiany na 5 sekund*
 
 ```
@@ -1058,7 +1061,7 @@ Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
 
 - **Tworzenie procesów**
     - `fork()`: [użycie w procesie dyrektora](src/dyrektor.c#L155)
-    - `execl()`: [użycie w procesie dyrektora - technicznie w dziecku](src/dyrektor.c#168)
+    - `execl()`: [użycie w procesie dyrektora - technicznie w dziecku](src/dyrektor.c#L168)
     - `waitpid()`: [użycie w wątku process managera](src/dyrektor.c#L425)
 
 - **Tworzenie i obsługa wątków**
@@ -1073,14 +1076,14 @@ Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
 - **Synchronizacja procesów**
     - `ftok()`: [użycie w procesie dyrektora](src/dyrektor.c#L60)
     - `semget()`: [użycie w procesie dyrektora](src/dyrektor.c#L79)
-    - `semctl()`: [użycie w procesie dyrektora](src/dyrektor.c#100)
-    - `semop()`: [użycie w procesie dostawcy](src/dostawca.c#95)
+    - `semctl()`: [użycie w procesie dyrektora](src/dyrektor.c#L100)
+    - `semop()`: [użycie w procesie dostawcy](src/dostawca.c#L95)
 
 - **Segmenty pamięcie dzielonej**
     - `shmget()`: [użycie w procesie dyrektora](src/dyrektor.c#L66)
     - `shmat()`: [użycie w procesie dostawcy](src/dostawca.c#L62)
     - `shmdt()`: [użycie w procesie pracownika](src/pracownik.c#L251)
-    - `shmctl()`: [użycie w procesie dyrektora][src/dyrektor.c#L338]
+    - `shmctl()`: [użycie w procesie dyrektora](src/dyrektor.c#L338)
 
 - **Kolejki komunikatów**
     - `msgget()`: [użycie w procesie dyrektora](src/dyrektor.c#L106)
