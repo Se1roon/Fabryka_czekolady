@@ -4,9 +4,6 @@
 
 #include "../include/common.h"
 
-// TODO: Move colors to logger and send the color code as a parameter
-// TODO: Documentation & Tests
-
 static int shm_id = -1;
 static int sem_id = -1;
 static int msg_id = -1;
