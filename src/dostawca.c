@@ -9,8 +9,15 @@ static Magazine *magazine = NULL;
 static bool is_active = true;
 
 void get_component_indexes(char component_type, int *start_out, int *end_out);
+int find_consecutive(char *array, int start_i, int end_i, char search_term, int count);
+
+int find_A();
+int find_B();
+int find_C();
+int find_D();
 
 static void signal_handler(int sig_num, siginfo_t *sig_info, void *data);
+
 
 int main(int argc, char *argv[]) {
     struct sigaction sa;
@@ -75,7 +82,8 @@ int main(int argc, char *argv[]) {
     struct sembuf sem_op_in[2];
     sem_op_in[0].sem_num = sem_empty;
     sem_op_in[0].sem_flg = 0;
-    sem_op_in[0].sem_op = -1;
+    sem_op_in[0].sem_op = (component == 'A' || component == 'B') ? -1 : (component == 'C') ? -2
+                                                                                           : -3;
     sem_op_in[1].sem_num = SEM_MAGAZINE;
     sem_op_in[1].sem_flg = SEM_UNDO;
     sem_op_in[1].sem_op = -1;
@@ -89,6 +97,7 @@ int main(int argc, char *argv[]) {
 
     send_log(msg_id, "%s[Supplier: %c] Starting deliveries of %c!%s", INFO_CLR_SET, component, component, CLR_RST);
 
+    bool cap_reached = false;
     while (is_active) {
         bool lock_acquired = true;
 
@@ -106,11 +115,80 @@ int main(int argc, char *argv[]) {
         if (!lock_acquired)
             break;
 
-        for (int i = start_index; i <= end_index; i++) {
-            if (magazine->buffer[i] == 0) {
-                magazine->buffer[i] = component;
+        if (component == 'A') {
+            int s_i = find_A();
+            if (s_i < 0 && !cap_reached) {
+                send_log(msg_id, "%s[Supplier: %c] Not enough space for component %c!%s", WARNING_CLR_SET, component, component, CLR_RST);
+                cap_reached = true;
+            } else {
+                sigset_t block_mask;
+                sigemptyset(&block_mask);
+                sigaddset(&block_mask, SIGINT);
+                sigprocmask(SIG_BLOCK, &block_mask, NULL);
+
+                magazine->buffer[s_i] = component;
                 send_log(msg_id, "%s[Supplier: %c] Delivered %c component!%s", INFO_CLR_SET, component, component, CLR_RST);
-                break;
+
+                sigprocmask(SIG_UNBLOCK, &block_mask, NULL);
+
+                cap_reached = false;
+            }
+        } else if (component == 'B') {
+            int s_i = find_B();
+            if (s_i < 0 && !cap_reached) {
+                send_log(msg_id, "%s[Supplier: %c] Not enough space for component %c!%s", WARNING_CLR_SET, component, component, CLR_RST);
+                cap_reached = true;
+            } else {
+                sigset_t block_mask;
+                sigemptyset(&block_mask);
+                sigaddset(&block_mask, SIGINT);
+                sigprocmask(SIG_BLOCK, &block_mask, NULL);
+
+                magazine->buffer[s_i] = component;
+                send_log(msg_id, "%s[Supplier: %c] Delivered %c component!%s", INFO_CLR_SET, component, component, CLR_RST);
+
+                sigprocmask(SIG_UNBLOCK, &block_mask, NULL);
+
+                cap_reached = false;
+            }
+        } else if (component == 'C') {
+            int s_i = find_C();
+            if (s_i < 0 && !cap_reached) {
+                send_log(msg_id, "%s[Supplier: %c] Not enough space for component %c!%s", WARNING_CLR_SET, component, component, CLR_RST);
+                cap_reached = true;
+            } else {
+                sigset_t block_mask;
+                sigemptyset(&block_mask);
+                sigaddset(&block_mask, SIGINT);
+                sigprocmask(SIG_BLOCK, &block_mask, NULL);
+
+                magazine->buffer[s_i] = component;
+                magazine->buffer[s_i + 1] = component;
+                send_log(msg_id, "%s[Supplier: %c] Delivered %c component!%s", INFO_CLR_SET, component, component, CLR_RST);
+
+                sigprocmask(SIG_UNBLOCK, &block_mask, NULL);
+
+                cap_reached = false;
+            }
+        } else if (component == 'D') {
+            int s_i = find_D();
+            if (s_i < 0 && !cap_reached) {
+                send_log(msg_id, "%s[Supplier: %c] Not enough space for component %c!%s", WARNING_CLR_SET, component, component, CLR_RST);
+                cap_reached = true;
+            } else {
+                sigset_t block_mask;
+                sigemptyset(&block_mask);
+                sigaddset(&block_mask, SIGINT);
+                sigprocmask(SIG_BLOCK, &block_mask, NULL);
+
+                magazine->buffer[s_i] = component;
+                magazine->buffer[s_i + 1] = component;
+                magazine->buffer[s_i + 2] = component;
+                send_log(msg_id, "%s[Supplier: %c] Delivered %c component!%s", INFO_CLR_SET, component, component, CLR_RST);
+
+                sigprocmask(SIG_UNBLOCK, &block_mask, NULL);
+
+                cap_reached = false;
             }
         }
 
@@ -166,4 +244,38 @@ void signal_handler(int sig_num, siginfo_t *sig_info, void *data) {
             kill(getppid(), SIGUSR2);
         }
     }
+}
+
+int find_A() {
+    return find_consecutive(magazine->buffer, IsA, IkA, 0, 1);
+}
+
+int find_B() {
+    return find_consecutive(magazine->buffer, IsB, IkB, 0, 1);
+}
+
+int find_C() {
+    return find_consecutive(magazine->buffer, IsC, IkC, 0, 2);
+}
+
+int find_D() {
+    return find_consecutive(magazine->buffer, IsD, IkD, 0, 3);
+}
+
+
+int find_consecutive(char *array, int start_i, int end_i, char search_term, int count) {
+    if (count <= 0)
+        return -1;
+
+    int consecutive = 0;
+
+    for (int i = start_i; i <= end_i; i++) {
+        if (array[i] == search_term)
+            consecutive++;
+
+        if (consecutive == count)
+            return i - count + 1;
+    }
+
+    return -1;
 }

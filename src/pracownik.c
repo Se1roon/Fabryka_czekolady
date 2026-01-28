@@ -123,18 +123,26 @@ int main(int argc, char *argv[]) {
                     }
                 }
                 // Look for C
-                for (int i = IsC; i <= IkC; i++) {
-                    if (magazine->buffer[i] == 'C') {
-                        idx_C = i;
+                for (int i = IsC + 1; i <= IkC; i++) {
+                    if (magazine->buffer[i - 1] == 'C' && magazine->buffer[i] == 'C') {
+                        idx_C = i - 1;
                         break;
                     }
                 }
 
+                sigset_t block_mask;
+                sigemptyset(&block_mask);
+                sigaddset(&block_mask, SIGINT);
+                sigprocmask(SIG_BLOCK, &block_mask, NULL);
+
                 magazine->buffer[idx_A] = 0;
                 magazine->buffer[idx_B] = 0;
                 magazine->buffer[idx_C] = 0;
+                magazine->buffer[idx_C + 1] = 0;
                 magazine->typeX_produced++;
                 send_log(msg_id, "%s[Worker: X] PRODUCED chocolate type X!%s", INFO_CLR_SET, CLR_RST);
+
+                sigprocmask(SIG_UNBLOCK, &block_mask, NULL);
             }
 
             struct sembuf sem_op_out[4];
@@ -148,7 +156,7 @@ int main(int argc, char *argv[]) {
             sem_op_out[2].sem_op = 1;
             sem_op_out[2].sem_flg = 0;
             sem_op_out[3].sem_num = SEM_EMPTY_C;
-            sem_op_out[3].sem_op = 1;
+            sem_op_out[3].sem_op = 2;
             sem_op_out[3].sem_flg = 0;
 
             while (semop(sem_id, sem_op_out, 4) == -1) {
@@ -210,18 +218,27 @@ int main(int argc, char *argv[]) {
                     }
                 }
                 // Look for D
-                for (int i = IsD; i <= IkD; i++) {
-                    if (magazine->buffer[i] == 'D') {
-                        idx_D = i;
+                for (int i = IsD + 2; i <= IkD; i++) {
+                    if (magazine->buffer[i - 2] == 'D' && magazine->buffer[i - 1] == 'D' && magazine->buffer[i] == 'D') {
+                        idx_D = i - 2;
                         break;
                     }
                 }
 
+                sigset_t block_mask;
+                sigemptyset(&block_mask);
+                sigaddset(&block_mask, SIGINT);
+                sigprocmask(SIG_BLOCK, &block_mask, NULL);
+
                 magazine->buffer[idx_A] = 0;
                 magazine->buffer[idx_B] = 0;
                 magazine->buffer[idx_D] = 0;
+                magazine->buffer[idx_D + 1] = 0;
+                magazine->buffer[idx_D + 2] = 0;
                 magazine->typeY_produced++;
                 send_log(msg_id, "%s[Worker: Y] PRODUCED chocolate type Y!%s", INFO_CLR_SET, CLR_RST);
+
+                sigprocmask(SIG_UNBLOCK, &block_mask, NULL);
             }
 
             struct sembuf sem_op_out[4];
@@ -235,7 +252,7 @@ int main(int argc, char *argv[]) {
             sem_op_out[2].sem_op = 1;
             sem_op_out[2].sem_flg = 0;
             sem_op_out[3].sem_num = SEM_EMPTY_D;
-            sem_op_out[3].sem_op = 1;
+            sem_op_out[3].sem_op = 3;
             sem_op_out[3].sem_flg = 0;
 
             while (semop(sem_id, sem_op_out, 4) == -1) {

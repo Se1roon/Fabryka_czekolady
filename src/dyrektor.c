@@ -18,6 +18,7 @@ static bool magazine_active = true;
 static bool workerX_active = true;
 static bool workerY_active = true;
 
+int synchronize_semaphores();
 void *manage_processes(void *arg);
 
 int restore_state();
@@ -84,10 +85,10 @@ int main() {
     union semun arg;
     unsigned short values[9];
     values[SEM_MAGAZINE] = 1;
-    values[SEM_EMPTY_A] = IkA - IsA + 1;
-    values[SEM_EMPTY_B] = IkB - IsB + 1;
-    values[SEM_EMPTY_C] = IkC - IsC + 1;
-    values[SEM_EMPTY_D] = IkD - IsD + 1;
+    values[SEM_EMPTY_A] = A_SEG_SIZE;
+    values[SEM_EMPTY_B] = B_SEG_SIZE;
+    values[SEM_EMPTY_C] = C_SEG_SIZE;
+    values[SEM_EMPTY_D] = D_SEG_SIZE;
     values[SEM_FULL_A] = 0;
     values[SEM_FULL_B] = 0;
     values[SEM_FULL_C] = 0;
@@ -114,6 +115,14 @@ int main() {
     if (restore_state() != 0)
         send_log(msg_id, "%s[Director] Failed to restore magazine state! Starting from nothing%s", WARNING_CLR_SET, CLR_RST);
 
+    // Synchronize semaphores
+    if (synchronize_semaphores() < 0) {
+        fprintf(stderr, "%s[Director] Failed to synchronize semaphores!%s", ERROR_CLR_SET, CLR_RST);
+        clean_up_IPC();
+        return -1;
+    }
+    send_log(msg_id, "%s[Director] Synchronized semaphores!%s", INFO_CLR_SET, CLR_RST);
+
     // If the simulation was stopped (due to a terrorist attack for example)
     // restore the amount of chocolate that has been produced so far.
     // If the number of chocolate produced is less than the desired amount
@@ -125,7 +134,6 @@ int main() {
 
     send_log(msg_id, "%s[Director] Amount of chocolate produced so far:\n\tX = %d\n\tY = %d%s",
              INFO_CLR_SET, magazine->typeX_produced, magazine->typeY_produced, CLR_RST);
-
 
     send_log(msg_id, "%s[Director] Spawning child processes...%s", INFO_CLR_SET, CLR_RST);
 
@@ -146,31 +154,6 @@ int main() {
 
     int children_count = 0;
     child_processes[children_count++] = logger_pid;
-
-    // Creating Supplier processes
-    for (char component = 'A'; component < 'A' + 4; component++) {
-        pid_t supplier_pid = fork();
-        if (supplier_pid == -1) {
-            send_log(msg_id, "%s[Director] Failed to create child process! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
-
-            clean_up_CHILDREN(child_processes, children_count, true);
-            clean_up_IPC();
-            return -1;
-        }
-        if (supplier_pid == 0) {
-            char arg[2];
-            arg[0] = component;
-            arg[1] = 0;
-            unblock_signals_for_child();
-            execl("./bin/dostawca", "./bin/dostawca", arg, NULL);
-            send_log(msg_id, "%s[Director] Failed to start Supplier %c process! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
-
-            clean_up_CHILDREN(child_processes, children_count, true);
-            clean_up_IPC();
-            exit(1);
-        }
-        child_processes[children_count++] = supplier_pid;
-    }
 
     // Creating Worker processes
     for (char worker_type = 'X'; worker_type <= 'Y'; worker_type++) {
@@ -195,6 +178,31 @@ int main() {
             exit(1);
         }
         child_processes[children_count++] = worker_pid;
+    }
+
+    // Creating Supplier processes
+    for (char component = 'A'; component < 'A' + 4; component++) {
+        pid_t supplier_pid = fork();
+        if (supplier_pid == -1) {
+            send_log(msg_id, "%s[Director] Failed to create child process! (%s)%s", ERROR_CLR_SET, strerror(errno), CLR_RST);
+
+            clean_up_CHILDREN(child_processes, children_count, true);
+            clean_up_IPC();
+            return -1;
+        }
+        if (supplier_pid == 0) {
+            char arg[2];
+            arg[0] = component;
+            arg[1] = 0;
+            unblock_signals_for_child();
+            execl("./bin/dostawca", "./bin/dostawca", arg, NULL);
+            send_log(msg_id, "%s[Director] Failed to start Supplier %c process! (%s)%s", ERROR_CLR_SET, component, strerror(errno), CLR_RST);
+
+            clean_up_CHILDREN(child_processes, children_count, true);
+            clean_up_IPC();
+            exit(1);
+        }
+        child_processes[children_count++] = supplier_pid;
     }
 
     send_log(msg_id, "%s[Director] Spawned child processes! Starting process manager thread%s", INFO_CLR_SET, CLR_RST);
@@ -224,44 +232,42 @@ int main() {
         if (sig > 0) {
             if (sig == SIGINT) {
                 send_log(msg_id, "%s[Director] Received SIGINT | Shutting down%s", INFO_CLR_SET, CLR_RST);
-                if (save_state() < 0)
-                    send_log(msg_id, "%s[Director] Unable to save state!%s", ERROR_CLR_SET, CLR_RST);
 
                 clean_up_CHILDREN(child_processes, 7, true);
+                save_state();
                 clean_up_IPC();
                 exit(0);
 
             } else if (sig == SIGUSR1) {
-                if (info.si_pid == child_processes[5]) {
+                if (info.si_pid == child_processes[1]) {
                     // source is Worker X -> X Production is done
                     if (!workerY_active) {
                         send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                        kill(child_processes[1], SIGINT);
+                        kill(child_processes[3], SIGINT);
                         send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                        kill(child_processes[2], SIGINT);
+                        kill(child_processes[4], SIGINT);
                     }
                     send_log(msg_id, "%s[Director] Stopping C deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                    kill(child_processes[3], SIGINT);
+                    kill(child_processes[5], SIGINT);
                     workerX_active = false;
 
-                } else if (info.si_pid == child_processes[6]) {
+                } else if (info.si_pid == child_processes[2]) {
                     // source is Worker Y -> Y Production is done
                     if (!workerX_active) {
                         send_log(msg_id, "%s[Director] Stopping A deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                        kill(child_processes[1], SIGINT);
+                        kill(child_processes[3], SIGINT);
                         send_log(msg_id, "%s[Director] Stopping B deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                        kill(child_processes[2], SIGINT);
+                        kill(child_processes[4], SIGINT);
                     }
                     send_log(msg_id, "%s[Director] Stopping D deliveries!%s", WARNING_CLR_SET, CLR_RST);
-                    kill(child_processes[4], SIGINT);
+                    kill(child_processes[6], SIGINT);
                     workerY_active = false;
                 }
             } else if (sig == SIGUSR2) {
                 send_log(msg_id, "%s[Director] Received SIGUSR2... A terrorist attack detected!%s", ERROR_CLR_SET, CLR_RST);
-                if (save_state() < 0)
-                    send_log(msg_id, "%s[Director] Unable to save state!%s", ERROR_CLR_SET, CLR_RST);
 
                 clean_up_CHILDREN(child_processes, 7, true);
+                save_state();
                 clean_up_IPC();
                 exit(0);
 
@@ -410,6 +416,49 @@ int save_state() {
         send_log(msg_id, "%s[Director] Saved magazine state!%s", INFO_CLR_SET, CLR_RST);
         fclose(f);
     }
+
+    return 0;
+}
+
+int synchronize_semaphores() {
+    int count_A = 0;
+    int count_B = 0;
+    int count_C = 0;
+    int count_D = 0;
+
+    for (int i = IsA; i <= IkA; i++) {
+        if (magazine->buffer[i] == 'A')
+            count_A++;
+    };
+    for (int i = IsB; i <= IkB; i++) {
+        if (magazine->buffer[i] == 'B')
+            count_B++;
+    };
+    for (int i = IsC; i <= IkC; i++) {
+        if (magazine->buffer[i] == 'C')
+            count_C++;
+    };
+    for (int i = IsD; i <= IkD; i++) {
+        if (magazine->buffer[i] == 'D')
+            count_D++;
+    };
+
+    union semun arg;
+    unsigned short values[9];
+    semctl(sem_id, 0, GETALL, values);
+
+    values[SEM_EMPTY_A] = A_SEG_SIZE - count_A;
+    values[SEM_FULL_A] = count_A;
+    values[SEM_EMPTY_B] = B_SEG_SIZE - count_B;
+    values[SEM_FULL_B] = count_B;
+    values[SEM_EMPTY_C] = C_SEG_SIZE - count_C;
+    values[SEM_FULL_C] = count_C / 2;
+    values[SEM_EMPTY_D] = D_SEG_SIZE - count_D;
+    values[SEM_FULL_D] = count_D / 3;
+
+    arg.array = values;
+    if (semctl(sem_id, 0, SETALL, arg) == -1)
+        return -1;
 
     return 0;
 }

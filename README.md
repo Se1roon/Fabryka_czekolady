@@ -966,6 +966,203 @@ Fri Jan 23 17:18:18 2026] [Worker: Y] PRODUCED chocolate type Y!
 ❯ 
 ```
 
+**Test 8 - Poprawna ilość dostarczonych składników (bez wczytywania magazynu)**
+
+| Stała | Wartość |
+|-------|---------|
+| `X_TO_PRODUCE` | 250000 |
+| `Y_TO_PRODUCE` | 100000 |
+
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor
+.
+.
+[Wed Jan 28 17:50:11 2026] [Supplier] Received SIGINT
+[Wed Jan 28 17:50:11 2026] [Supplier: A] Terminating
+[Wed Jan 28 17:50:11 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:50:11 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:50:11 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:50:11 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:50:11 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:50:11 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:50:11 2026] [Director] Stopping B deliveries!
+[Wed Jan 28 17:50:11 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:50:11 2026] [Director] Stopping C deliveries!
+[Wed Jan 28 17:50:11 2026] [Supplier] Received SIGINT
+[Wed Jan 28 17:50:11 2026] [Process Manager] Successfully collected process 84337 (exit code 0)!
+[Wed Jan 28 17:50:11 2026] [Supplier: B] Terminating
+[Wed Jan 28 17:50:11 2026] [Supplier] Received SIGINT
+[Wed Jan 28 17:50:11 2026] [Supplier: C] Terminating
+[Wed Jan 28 17:50:11 2026] [Process Manager] Successfully collected process 84339 (exit code 0)!
+[Wed Jan 28 17:50:11 2026] [Process Manager] Successfully collected process 84340 (exit code 0)!
+[Wed Jan 28 17:50:11 2026] [Process Manager] Successfully collected process 84341 (exit code 0)!
+[Wed Jan 28 17:50:11 2026] [Director] FACTORY FINISHED WORK!
+[Wed Jan 28 17:50:11 2026] [Director] Saved magazine state!
+[Director] Child process 84336 has terminated (code 0)
+[Director] Amount of chocolate produced:
+	X = 250000
+	Y = 100000
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ head -20 simulation.log 
+--- SIMULATION START ---
+[Wed Jan 28 17:49:56 2026] [Director] IPC Resources created!
+[Wed Jan 28 17:49:56 2026] [Director] Restoring magazine state...
+[Wed Jan 28 17:49:56 2026] [Director] magazine.bin file not found. Nothing to restore from.
+[Wed Jan 28 17:49:56 2026] [Director] Synchronized semaphores!
+[Wed Jan 28 17:49:56 2026] [Director] Amount of chocolate produced so far:
+	X = 0
+	Y = 0
+[Wed Jan 28 17:49:56 2026] [Director] Spawning child processes...
+[Wed Jan 28 17:49:56 2026] [Director] Spawned child processes! Starting process manager thread
+[Wed Jan 28 17:49:56 2026] [Director] Process Management thread launched successfully!
+[Wed Jan 28 17:49:56 2026] [Director] Waiting for Factory to finish work!
+[Wed Jan 28 17:49:56 2026] [Worker: X] Worker X started
+[Wed Jan 28 17:49:56 2026] [Supplier: A] Starting deliveries of A!
+[Wed Jan 28 17:49:56 2026] [Supplier: A] Delivered A component!
+[Wed Jan 28 17:49:56 2026] [Supplier: A] Delivered A component!
+[Wed Jan 28 17:49:56 2026] [Supplier: B] Starting deliveries of B!
+[Wed Jan 28 17:49:56 2026] [Supplier: A] Delivered A component!
+[Wed Jan 28 17:49:56 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:49:56 2026] [Supplier: A] Delivered A component!
+```
+
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./check_deliveries.sh 
+A: 350004
+B: 350012
+C: 250142
+D: 100144
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/check_magazine
+===== STAN MAGAZYNU (magazine.bin) =====
+Pojemność całkowita (bajty): 1000
+----------------------------------------
+Składniki A: 4
+Składniki B: 12
+Składniki C: 142 (zajęte bajty: 284)
+Składniki D: 144 (zajęte bajty: 432)
+----------------------------------------
+Wyprodukowano X: 250000
+Wyprodukowano Y: 100000
+========================================
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ 
+```
+
+- Jak widać fabryka pobiera tylko tyle składników ile faktycznie jest jej potrzebne do produkcji czekolady. Reszta jest przechowywana w magazynie.
+
+**Test 9 - Poprawna ilość dostarczonych składników (wczytanie magazynu)**
+
+Z poprzedniego testu widać, że w magazynie zostało 4 składniki A, 12 B, 142 C oraz 144 D. Pozwala to na wyprodukowanie 4 czekolad, jeszcze przed rozpoczęciem dostaw.
+
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/dyrektor 
+.
+.
+[Wed Jan 28 17:55:52 2026] [Supplier: C] Delivered C component!
+[Wed Jan 28 17:55:52 2026] [Worker: X] PRODUCTION X COMPLETE | Sending notification to Director
+[Wed Jan 28 17:55:52 2026] [Worker: X] Terminating
+[Wed Jan 28 17:55:52 2026] [Director] Stopping A deliveries!
+[Wed Jan 28 17:55:52 2026] [Supplier: A] Delivered A component!
+[Wed Jan 28 17:55:52 2026] [Director] Stopping B deliveries!
+[Wed Jan 28 17:55:52 2026] [Director] Stopping C deliveries!
+[Wed Jan 28 17:55:52 2026] [Supplier] Received SIGINT
+[Wed Jan 28 17:55:52 2026] [Supplier: A] Terminating
+[Wed Jan 28 17:55:52 2026] [Supplier] Received SIGINT
+[Wed Jan 28 17:55:52 2026] [Supplier: B] Terminating
+[Wed Jan 28 17:55:52 2026] [Supplier] Received SIGINT
+[Wed Jan 28 17:55:52 2026] [Supplier: C] Terminating
+[Wed Jan 28 17:55:52 2026] [Process Manager] Successfully collected process 85382 (exit code 0)!
+[Wed Jan 28 17:55:52 2026] [Process Manager] Successfully collected process 85384 (exit code 0)!
+[Wed Jan 28 17:55:52 2026] [Process Manager] Successfully collected process 85385 (exit code 0)!
+[Wed Jan 28 17:55:52 2026] [Process Manager] Successfully collected process 85386 (exit code 0)!
+[Wed Jan 28 17:55:52 2026] [Director] FACTORY FINISHED WORK!
+[Wed Jan 28 17:55:52 2026] [Director] Saved magazine state!
+[Director] Child process 85381 has terminated (code 0)
+[Director] Amount of chocolate produced:
+	X = 250000
+	Y = 100000
+[Director] IPC cleaned up.
+
+~/Documents/Studia/SO/Fabryka_czekolady main* 15s
+❯ head -30 simulation.log
+--- SIMULATION START ---
+[Wed Jan 28 17:55:37 2026] [Director] IPC Resources created!
+[Wed Jan 28 17:55:37 2026] [Director] Restoring magazine state...
+[Wed Jan 28 17:55:37 2026] [Director] Restored magazine state!
+[Wed Jan 28 17:55:37 2026] [Director] Synchronized semaphores!
+[Wed Jan 28 17:55:37 2026] [Director] Amount of chocolate produced so far:
+	X = 0
+	Y = 0
+[Wed Jan 28 17:55:37 2026] [Director] Spawning child processes...
+[Wed Jan 28 17:55:37 2026] [Director] Spawned child processes! Starting process manager thread
+[Wed Jan 28 17:55:37 2026] [Director] Process Management thread launched successfully!
+[Wed Jan 28 17:55:37 2026] [Director] Waiting for Factory to finish work!
+[Wed Jan 28 17:55:37 2026] [Worker: X] Worker X started
+[Wed Jan 28 17:55:37 2026] [Worker: X] PRODUCED chocolate type X!       <--
+[Wed Jan 28 17:55:37 2026] [Worker: X] PRODUCED chocolate type X!       <--
+[Wed Jan 28 17:55:37 2026] [Worker: X] PRODUCED chocolate type X!       <--
+[Wed Jan 28 17:55:37 2026] [Worker: X] PRODUCED chocolate type X!       <--
+[Wed Jan 28 17:55:37 2026] [Worker: Y] Worker Y started
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Starting deliveries of B!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+[Wed Jan 28 17:55:37 2026] [Supplier: B] Delivered B component!
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ 
+```
+
+- Jak widać program zachował się poprawnie i wyprodukował 4 czekolady typu X.
+
+```
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./check_deliveries.sh
+A: 350001
+B: 350068
+C: 250000
+D: 100000
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ ./bin/check_magazine
+===== STAN MAGAZYNU (magazine.bin) =====
+Pojemność całkowita (bajty): 1000
+----------------------------------------
+Składniki A: 5
+Składniki B: 80
+Składniki C: 142 (zajęte bajty: 284)
+Składniki D: 144 (zajęte bajty: 432)
+----------------------------------------
+Wyprodukowano X: 250000
+Wyprodukowano Y: 100000
+========================================
+
+~/Documents/Studia/SO/Fabryka_czekolady main*
+❯ 
+```
+
+Przed uruchomieniem symulacji w magazynie było przechowywane 4 składniki A, 12 B, 142 C oraz 144 D. W takim razie do wyprodukowanie 250000 czekolad X i 100000 czekolad Y program potrzebował dostaw 349996 składników A, 349988 składników B, 249858 składników C oraz 99856 składników D. Wobec tego do magazynu powinno trawić (i trafia):
+- 350001 - 349996 = 5 A
+- 350068 - 349988 = 80 B
+- 250000 - 249858 = 142 C
+- 100000 - 99856  = 144 D
+
+
 ## Kluczowe funkcje systemowe użyte w projekcie
 
 - **Obsługa plików**

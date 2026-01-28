@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,13 +33,13 @@
 #define Y_TYPE_SIZE (A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (D_COMPONENT_SIZE)
 
 // Change these
-#define X_TYPE_TO_PRODUCE 50000
-#define Y_TYPE_TO_PRODUCE 10
+#define X_TYPE_TO_PRODUCE 250000
+#define Y_TYPE_TO_PRODUCE 100000
 
 // Keep this < 50000 so that semaphore operations don't fail
 // Should be able to handle up to around 75,000 on most systems, but there is no reason to make it that big.
 // REMEMBER TO DELETE magazine.bin AFTER CHANGING THIS
-#define MAGAZINE_CAPACITY 1000
+#define MAGAZINE_CAPACITY 200
 
 #define COMPONENT_SPACE (MAGAZINE_CAPACITY) / ((A_COMPONENT_SIZE) + (B_COMPONENT_SIZE) + (C_COMPONENT_SIZE) + (D_COMPONENT_SIZE))
 
@@ -51,7 +52,12 @@
 #define IsC (IkB) + 1
 #define IkC (IsC) + (2 * (COMPONENT_SPACE) - 1)
 #define IsD (IkC) + 1
-#define IkD (IsD) + (3 * (COMPONENT_SPACE) - 1)
+#define IkD (MAGAZINE_CAPACITY - 1)
+
+#define A_SEG_SIZE ((IkA) - (IsA) + 1)
+#define B_SEG_SIZE ((IkB) - (IsB) + 1)
+#define C_SEG_SIZE ((IkC) - (IsC) + 1)
+#define D_SEG_SIZE ((IkD) - (IsD) + 1)
 
 union semun {
     int val;
